@@ -1,12 +1,24 @@
 import { Activity, Menu, Search } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
 
-export function Topbar() {
+type TopbarProps = {
+  onOpenMenu: () => void;
+};
+
+export function Topbar({ onOpenMenu }: TopbarProps) {
   return (
     <header className="sticky top-0 z-20 border-b border-white/10 bg-slate-950/85 backdrop-blur">
       <div className="flex h-16 items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
         <div className="flex items-center gap-3 lg:hidden">
-          <Menu className="h-6 w-6 text-slate-300" aria-hidden="true" />
+          <button
+            type="button"
+            onClick={onOpenMenu}
+            className="flex h-10 w-10 items-center justify-center rounded-md text-slate-300 transition hover:bg-white/5 hover:text-white"
+            aria-label="Open menu"
+            aria-controls="mobile-navigation"
+          >
+            <Menu className="h-6 w-6" aria-hidden="true" />
+          </button>
           <span className="text-base font-semibold text-white">AlertHub Safe City</span>
         </div>
 

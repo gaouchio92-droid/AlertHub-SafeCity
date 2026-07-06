@@ -18,11 +18,13 @@ See [docs/architecture.md](docs/architecture.md) for the system layout.
 
 Create an environment file:
 
-```bash
-cp .env.example .env
+```powershell
+Copy-Item .env.example .env
 ```
 
-Update secrets in `.env` before running outside local development.
+Update secrets in `.env` before running outside local development. If you already started the
+database with the default Compose values, keep `POSTGRES_PASSWORD=alerthub_password` unless you
+also recreate the PostgreSQL volume.
 
 ## Docker
 
@@ -112,12 +114,14 @@ Zabbix API and Zabbix Database connectors are optional and disabled by default.
 
 Configure connector selection with environment variables:
 
-```bash
+```env
 EVENT_SOURCE=discord
 CONNECTOR_IMPORTS=
 ENABLE_DISCORD=true
 ENABLE_ZABBIX_API=false
 ENABLE_ZABBIX_DB=false
+DISCORD_TOKEN=your-discord-bot-token
+DISCORD_CHANNEL_ID=your-discord-channel-id
 ```
 
 Supported `EVENT_SOURCE` values are `discord`, `zabbix_api`, `zabbix_database`, and `multiple`.
@@ -131,6 +135,15 @@ Check connector status:
 ```bash
 curl http://localhost/connectors
 ```
+
+Apply local `.env` changes on Windows:
+
+```powershell
+.\scripts\apply-env.ps1
+```
+
+The script recreates the backend and Nginx containers, then prints connector diagnostics. Discord
+is ready only when `DISCORD_TOKEN` and `DISCORD_CHANNEL_ID` are configured.
 
 ## Production
 
