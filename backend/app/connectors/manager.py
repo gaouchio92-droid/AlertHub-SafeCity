@@ -2,7 +2,7 @@
 
 import asyncio
 
-from app.connectors.base import BaseConnector, ConnectorStatus
+from app.connectors.base import BaseConnector, ConnectorEvent, ConnectorStatus
 from app.connectors.factory import ConnectorFactory, build_connector_factory, import_connector_class
 from app.core.config.settings import Settings, get_settings
 from app.core.logging import get_logger
@@ -52,6 +52,15 @@ class ConnectorManager:
             self.load()
         return [await connector.health() for connector in self._connectors]
 
+    async def sync(self) -> list[ConnectorEvent]:
+        """Collect normalized events from every active connector."""
+        if not self._connectors:
+            await self.start()
+        results = await asyncio.gather(
+            *(self._safe_sync(connector) for connector in self._active_connectors()),
+        )
+        return [event for connector_events in results for event in connector_events]
+
     def _selected_sources(self) -> tuple[str, ...]:
         configured_source = self._settings.event_source
         all_sources = self._factory.registered_sources()
@@ -76,6 +85,13 @@ class ConnectorManager:
             await connector.connect()
         except Exception:
             logger.exception("Connector failed to connect", extra={"source": connector.source})
+
+    async def _safe_sync(self, connector: BaseConnector) -> list[ConnectorEvent]:
+        try:
+            return await connector.sync()
+        except Exception:
+            logger.exception("Connector sync failed", extra={"source": connector.source})
+            return []
 
     def _register_configured_connectors(self) -> None:
         import_paths = [

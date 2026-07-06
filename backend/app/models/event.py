@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID, uuid4
 
-from sqlalchemy import DateTime, Index, Integer, String, Text
+from sqlalchemy import DateTime, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PostgresUUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -17,6 +17,7 @@ class Event(Base):
 
     __tablename__ = "events"
     __table_args__ = (
+        UniqueConstraint("source", "problem_id", name="uq_events_source_problem_id"),
         Index("ix_events_source_started_at", "source", "started_at"),
         Index("ix_events_status_started_at", "status", "started_at"),
     )

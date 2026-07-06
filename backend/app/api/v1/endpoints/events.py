@@ -5,8 +5,9 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
+from app.connectors.manager import connector_manager
 from app.database.session import get_db
-from app.schemas.events import EventListResponse, EventResponse
+from app.schemas.events import EventListResponse, EventResponse, EventSyncResponse
 from app.services.events import EventService
 
 router = APIRouter()
@@ -34,4 +35,18 @@ def list_events(
         total=total,
         limit=limit,
         offset=offset,
+    )
+
+
+@router.post("/sync", response_model=EventSyncResponse, summary="Sync connector events")
+async def sync_events(
+    db: Annotated[Session, Depends(get_db)],
+) -> EventSyncResponse:
+    """Collect events from active connectors and persist them locally."""
+    connector_events = await connector_manager.sync()
+    result = EventService(db).upsert_connector_events(connector_events)
+    return EventSyncResponse(
+        received=result.received,
+        created=result.created,
+        updated=result.updated,
     )

@@ -6,8 +6,10 @@ from uuid import uuid4
 from fastapi.testclient import TestClient
 
 from app.api.v1.endpoints import events as events_endpoint
+from app.connectors.base import ConnectorEvent
 from app.main import app
 from app.schemas.events import EventResponse
+from app.services.events import EventIngestionResult
 
 
 class StubEventService:
@@ -57,6 +59,44 @@ class StubEventService:
         ], 1
 
 
+class StubSyncEventService:
+    """Test double for event ingestion."""
+
+    received_events: list[ConnectorEvent] = []
+
+    def __init__(self, db: object) -> None:
+        self._db = db
+
+    def upsert_connector_events(
+        self,
+        connector_events: list[ConnectorEvent],
+    ) -> EventIngestionResult:
+        """Capture connector events and return deterministic counters."""
+        self.received_events = connector_events
+        return EventIngestionResult(received=len(connector_events), created=1, updated=1)
+
+
+class StubConnectorManager:
+    """Test double for connector synchronization."""
+
+    async def sync(self) -> list[ConnectorEvent]:
+        """Return deterministic connector events."""
+        return [
+            ConnectorEvent(
+                source="discord",
+                problem_id="message-1",
+                status="received",
+                raw_payload={"content": "first"},
+            ),
+            ConnectorEvent(
+                source="discord",
+                problem_id="message-2",
+                status="received",
+                raw_payload={"content": "second"},
+            ),
+        ]
+
+
 def test_list_events_returns_paginated_events(monkeypatch: object) -> None:
     monkeypatch.setattr(events_endpoint, "EventService", StubEventService)
     client = TestClient(app)
@@ -92,3 +132,14 @@ def test_list_events_validates_limit() -> None:
     response = client.get("/api/v1/events", params={"limit": 101})
 
     assert response.status_code == 422
+
+
+def test_sync_events_collects_and_persists_connector_events(monkeypatch: object) -> None:
+    monkeypatch.setattr(events_endpoint, "connector_manager", StubConnectorManager())
+    monkeypatch.setattr(events_endpoint, "EventService", StubSyncEventService)
+    client = TestClient(app)
+
+    response = client.post("/api/v1/events/sync")
+
+    assert response.status_code == 200
+    assert response.json() == {"received": 2, "created": 1, "updated": 1}

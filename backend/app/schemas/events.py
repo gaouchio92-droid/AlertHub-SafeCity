@@ -36,3 +36,13 @@ class EventListResponse(BaseModel):
     total: int = Field(ge=0)
     limit: int = Field(ge=1, le=100)
     offset: int = Field(ge=0)
+
+
+class EventSyncResponse(BaseModel):
+    """Connector event synchronization response."""
+
+    model_config = ConfigDict(frozen=True)
+
+    received: int = Field(ge=0)
+    created: int = Field(ge=0)
+    updated: int = Field(ge=0)
