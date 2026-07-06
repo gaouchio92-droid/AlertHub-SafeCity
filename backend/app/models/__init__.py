@@ -1,4 +1,5 @@
-"""SQLAlchemy model package.
+"""SQLAlchemy model package."""
 
-Sprint 1 intentionally defines no application tables.
-"""
+from app.models.event import Event
+
+__all__ = ["Event"]

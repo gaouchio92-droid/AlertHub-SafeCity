@@ -86,7 +86,11 @@ class ZabbixApiConnector(BaseConnector):
 
         events = await self.event_get(params)
         normalized_events = [event for event in events if isinstance(event, dict)]
-        clocks = [int(event["clock"]) for event in normalized_events if str(event.get("clock", "")).isdigit()]
+        clocks = [
+            int(event["clock"])
+            for event in normalized_events
+            if str(event.get("clock", "")).isdigit()
+        ]
         if clocks:
             self._last_event_clock = max(clocks)
         return normalized_events

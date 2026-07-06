@@ -1,8 +1,24 @@
 """Connector API endpoint tests."""
 
 from fastapi.testclient import TestClient
+from pytest import MonkeyPatch
 
+from app.api.v1.endpoints import connectors as connectors_endpoint
+from app.core.config.settings import Settings
 from app.main import app
+
+
+def build_settings(**overrides: object) -> Settings:
+    """Build valid endpoint settings for API tests."""
+    values: dict[str, object] = {
+        "secret_key": "test-secret-key-with-at-least-32-chars",
+        "postgres_password": "postgres-password",
+        "jwt_secret": "test-jwt-secret-with-at-least-32-chars",
+        "discord_token": "",
+        "discord_channel_id": "",
+    }
+    values.update(overrides)
+    return Settings(**values)
 
 
 def test_connector_runtime_endpoint_returns_non_sensitive_configuration() -> None:
@@ -32,7 +48,10 @@ def test_connector_event_model_endpoint_returns_contract() -> None:
     assert {"source", "raw_payload", "severity", "status"}.issubset(fields)
 
 
-def test_connector_diagnostics_endpoint_returns_missing_configuration_without_secrets() -> None:
+def test_connector_diagnostics_endpoint_returns_missing_configuration_without_secrets(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(connectors_endpoint, "get_settings", build_settings)
     client = TestClient(app)
 
     response = client.get("/api/v1/connectors/diagnostics")

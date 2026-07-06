@@ -131,8 +131,10 @@ def test_connector_catalog_lists_current_and_future_sources() -> None:
         "grafana",
         "cacti",
     }.issubset(sources)
-    assert next(item for item in CONNECTOR_CATALOG if item.source == "discord").default_enabled is True
-    assert next(item for item in CONNECTOR_CATALOG if item.source == "rest_api").implemented is False
+    discord = next(item for item in CONNECTOR_CATALOG if item.source == "discord")
+    rest_api = next(item for item in CONNECTOR_CATALOG if item.source == "rest_api")
+    assert discord.default_enabled is True
+    assert rest_api.implemented is False
 
 
 def test_event_model_contract_contains_required_fields() -> None:

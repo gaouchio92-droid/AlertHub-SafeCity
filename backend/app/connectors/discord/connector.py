@@ -79,8 +79,13 @@ class DiscordConnector(BaseConnector):
     def parse(self, payload: dict[str, Any]) -> ConnectorEvent:
         """Normalize one Discord message payload."""
         timestamp = payload.get("timestamp")
-        started_at = datetime.fromisoformat(timestamp.replace("Z", "+00:00")) if timestamp else None
-        author = payload.get("author") if isinstance(payload.get("author"), dict) else {}
+        started_at = (
+            datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+            if isinstance(timestamp, str)
+            else None
+        )
+        author_payload = payload.get("author")
+        author: dict[str, Any] = author_payload if isinstance(author_payload, dict) else {}
 
         return ConnectorEvent(
             source=self.source,

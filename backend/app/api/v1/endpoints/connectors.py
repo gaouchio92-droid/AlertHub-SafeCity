@@ -123,7 +123,10 @@ async def connector_configuration_guide() -> list[ConnectorConfigurationGuideIte
                 "ZABBIX_PASSWORD",
             ],
             restart_required=True,
-            note="Optional connector. Disabled by default and requires valid Zabbix API credentials.",
+            note=(
+                "Optional connector. Disabled by default and requires valid "
+                "Zabbix API credentials."
+            ),
         ),
         ConnectorConfigurationGuideItemResponse(
             source="zabbix_database",
@@ -138,6 +141,9 @@ async def connector_configuration_guide() -> list[ConnectorConfigurationGuideIte
                 "ZABBIX_DB_PASSWORD",
             ],
             restart_required=True,
-            note="Optional read-only connector. The platform must never modify the Zabbix database.",
+            note=(
+                "Optional read-only connector. The platform must never modify "
+                "the Zabbix database."
+            ),
         ),
     ]

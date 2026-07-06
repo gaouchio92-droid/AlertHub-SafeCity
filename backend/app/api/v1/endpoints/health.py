@@ -1,5 +1,7 @@
 """Health-check endpoints."""
 
+from typing import Annotated
+
 from fastapi import APIRouter, Depends
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -13,8 +15,8 @@ router = APIRouter()
 
 @router.get("", response_model=HealthCheck, summary="Application health")
 def health_check(
-    db: Session = Depends(get_db),
-    settings: Settings = Depends(get_settings),
+    db: Annotated[Session, Depends(get_db)],
+    settings: Annotated[Settings, Depends(get_settings)],
 ) -> HealthCheck:
     """Return application and database health information."""
     db.execute(text("SELECT 1"))
