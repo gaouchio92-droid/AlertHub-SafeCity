@@ -1,5 +1,7 @@
 """Report API schemas."""
 
+from datetime import datetime
+
 from pydantic import BaseModel, ConfigDict
 
 
@@ -13,3 +15,41 @@ class WeeklyDiscordReportStatusResponse(BaseModel):
     visible_in_ui: bool
     reason: str
     required_before_available: list[str]
+
+
+class WeeklyDiscordReportMetricResponse(BaseModel):
+    """Named report metric."""
+
+    model_config = ConfigDict(frozen=True)
+
+    label: str
+    value: int
+
+
+class WeeklyDiscordReportEventResponse(BaseModel):
+    """Compact event row for report screens."""
+
+    model_config = ConfigDict(frozen=True)
+
+    problem_id: str | None
+    host: str | None
+    severity: str | None
+    status: str | None
+    problem_name: str | None
+    started_at: datetime | None
+
+
+class WeeklyDiscordReportResponse(BaseModel):
+    """Weekly Discord report generated from normalized events."""
+
+    model_config = ConfigDict(frozen=True)
+
+    source: str
+    period_start: datetime
+    period_end: datetime
+    total_events: int
+    open_events: int
+    resolved_events: int
+    by_severity: list[WeeklyDiscordReportMetricResponse]
+    by_host: list[WeeklyDiscordReportMetricResponse]
+    recent_events: list[WeeklyDiscordReportEventResponse]

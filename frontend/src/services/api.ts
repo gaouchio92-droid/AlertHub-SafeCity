@@ -64,6 +64,38 @@ export type WeeklyDiscordReportStatus = {
   required_before_available: string[];
 };
 
+export type WeeklyDiscordReportMetric = {
+  label: string;
+  value: number;
+};
+
+export type WeeklyDiscordReportEvent = {
+  problem_id: string | null;
+  host: string | null;
+  severity: string | null;
+  status: string | null;
+  problem_name: string | null;
+  started_at: string | null;
+};
+
+export type WeeklyDiscordReport = {
+  source: string;
+  period_start: string;
+  period_end: string;
+  total_events: number;
+  open_events: number;
+  resolved_events: number;
+  by_severity: WeeklyDiscordReportMetric[];
+  by_host: WeeklyDiscordReportMetric[];
+  recent_events: WeeklyDiscordReportEvent[];
+};
+
+export type EventSyncResult = {
+  received: number;
+  created: number;
+  updated: number;
+};
+
 export const apiClient = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL ?? '/api/v1',
   timeout: 10_000,
@@ -106,5 +138,15 @@ export async function getConnectorConfigurationGuide(): Promise<ConnectorConfigu
 
 export async function getWeeklyDiscordReportStatus(): Promise<WeeklyDiscordReportStatus> {
   const response = await apiClient.get<WeeklyDiscordReportStatus>('/reports/weekly-discord/status');
+  return response.data;
+}
+
+export async function getWeeklyDiscordReport(): Promise<WeeklyDiscordReport> {
+  const response = await apiClient.get<WeeklyDiscordReport>('/reports/weekly-discord');
+  return response.data;
+}
+
+export async function syncEvents(): Promise<EventSyncResult> {
+  const response = await apiClient.post<EventSyncResult>('/events/sync');
   return response.data;
 }

@@ -1,8 +1,13 @@
 """Report status endpoints."""
 
-from fastapi import APIRouter
+from typing import Annotated
 
-from app.schemas.reports import WeeklyDiscordReportStatusResponse
+from fastapi import APIRouter, Depends
+from sqlalchemy.orm import Session
+
+from app.database.session import get_db
+from app.schemas.reports import WeeklyDiscordReportResponse, WeeklyDiscordReportStatusResponse
+from app.services.reports import ReportService
 
 router = APIRouter()
 
@@ -16,16 +21,27 @@ async def weekly_discord_report_status() -> WeeklyDiscordReportStatusResponse:
     """Return the current implementation status for weekly Discord reports."""
     return WeeklyDiscordReportStatusResponse(
         feature="Weekly Discord report",
-        implemented=False,
+        implemented=True,
         visible_in_ui=True,
         reason=(
-            "Sprint 1 contains platform infrastructure only. Discord ingestion, analytics, "
-            "and weekly report generation are not implemented yet."
+            "Discord ingestion and normalized event persistence are active. The report is "
+            "generated from events stored during the last seven days."
         ),
         required_before_available=[
-            "Configure DISCORD_TOKEN and DISCORD_CHANNEL_ID",
-            "Implement Discord message ingestion",
-            "Persist normalized connector events",
-            "Implement weekly aggregation and report rendering",
+            "Keep DISCORD_TOKEN and DISCORD_CHANNEL_ID configured",
+            "Run connector synchronization to refresh events",
+            "Improve source-specific parsing as message formats are identified",
         ],
     )
+
+
+@router.get(
+    "/weekly-discord",
+    response_model=WeeklyDiscordReportResponse,
+    summary="Weekly Discord report",
+)
+def weekly_discord_report(
+    db: Annotated[Session, Depends(get_db)],
+) -> WeeklyDiscordReportResponse:
+    """Return a rolling seven-day Discord report."""
+    return ReportService(db).build_weekly_discord_report()
