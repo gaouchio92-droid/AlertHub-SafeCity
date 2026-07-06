@@ -1,0 +1,159 @@
+# AlertHub Safe City
+
+AlertHub Safe City is an independent monitoring analytics platform. Sprint 1 provides production-grade infrastructure only: FastAPI, React, PostgreSQL, Nginx, Docker Compose, Alembic, settings, logging, health checks, modular connectors, and documentation.
+
+Discord remains the default source. Zabbix API and Zabbix Database integrations are optional connector modules and disabled by default. Reports, analytics, authentication, and domain business logic are intentionally not implemented in this sprint.
+
+## Architecture
+
+- Backend: Python 3.12, FastAPI, SQLAlchemy, Alembic, Pydantic Settings, Uvicorn
+- Frontend: React, Vite, TypeScript, TailwindCSS, React Router, Axios
+- Database: PostgreSQL 16
+- Proxy: Nginx
+- Runtime: Docker and Docker Compose
+
+See [docs/architecture.md](docs/architecture.md) for the system layout.
+
+## Installation
+
+Create an environment file:
+
+```bash
+cp .env.example .env
+```
+
+Update secrets in `.env` before running outside local development.
+
+## Docker
+
+Start the full stack:
+
+```bash
+docker compose up --build
+```
+
+Open the application:
+
+- Frontend: http://localhost
+- API health: http://localhost/api/v1/health
+- Connector status: http://localhost/connectors
+- Swagger: http://localhost/docs
+
+Stop services:
+
+```bash
+docker compose down
+```
+
+Remove the PostgreSQL volume when you intentionally want a clean database:
+
+```bash
+docker compose down -v
+```
+
+## Development
+
+Backend local setup:
+
+```bash
+cd backend
+python -m venv .venv
+. .venv/bin/activate
+pip install -r requirements-dev.txt
+uvicorn app.main:app --reload
+```
+
+Frontend local setup:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Run backend quality checks:
+
+```bash
+cd backend
+ruff check .
+mypy app
+```
+
+Run frontend quality checks:
+
+```bash
+cd frontend
+npm run lint
+npm run build
+```
+
+## Database
+
+Alembic is configured but no application tables are created in Sprint 1.
+
+Create a future migration:
+
+```bash
+cd backend
+alembic revision --autogenerate -m "describe change"
+```
+
+Apply migrations:
+
+```bash
+cd backend
+alembic upgrade head
+```
+
+## Connectors
+
+AlertHub Safe City uses a modular connector architecture. Discord is the default event source.
+Zabbix API and Zabbix Database connectors are optional and disabled by default.
+
+Configure connector selection with environment variables:
+
+```bash
+EVENT_SOURCE=discord
+CONNECTOR_IMPORTS=
+ENABLE_DISCORD=true
+ENABLE_ZABBIX_API=false
+ENABLE_ZABBIX_DB=false
+```
+
+Supported `EVENT_SOURCE` values are `discord`, `zabbix_api`, `zabbix_database`, and `multiple`.
+When `multiple` is selected, every enabled connector starts concurrently.
+
+Future connectors can be registered with `CONNECTOR_IMPORTS` as a comma-separated list of connector
+classes that subclass `BaseConnector`, for example `my_package.connectors.RestApiConnector`.
+
+Check connector status:
+
+```bash
+curl http://localhost/connectors
+```
+
+## Production
+
+For production deployments:
+
+- Replace all default secrets.
+- Use managed secret storage.
+- Restrict CORS origins to approved domains.
+- Publish images through a trusted container registry.
+- Terminate TLS at the load balancer or Nginx edge.
+- Configure backup and retention policies for PostgreSQL.
+- Ship logs and metrics to the organization observability platform.
+
+## Project Structure
+
+```text
+backend/
+frontend/
+database/
+nginx/
+docs/
+docker-compose.yml
+.env.example
+README.md
+.gitignore
+```
