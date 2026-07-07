@@ -50,8 +50,9 @@ class EventService:
         """Persist connector events using source and problem_id as the idempotency key."""
         created = 0
         updated = 0
+        unique_events = self._deduplicate_connector_events(connector_events)
 
-        for connector_event in connector_events:
+        for connector_event in unique_events:
             event = self._find_existing_event(connector_event)
             if event is None:
                 self._db.add(self._build_event(connector_event))
@@ -66,6 +67,66 @@ class EventService:
             received=len(connector_events),
             created=created,
             updated=updated,
+        )
+
+    @classmethod
+    def _deduplicate_connector_events(
+        cls,
+        connector_events: list[ConnectorEvent],
+    ) -> list[ConnectorEvent]:
+        """Collapse duplicate source/problem pairs before database upsert."""
+        unique_events: dict[tuple[str, str], ConnectorEvent] = {}
+        events_without_problem_id: list[ConnectorEvent] = []
+
+        for connector_event in connector_events:
+            if not connector_event.problem_id:
+                events_without_problem_id.append(connector_event)
+                continue
+
+            key = (connector_event.source, connector_event.problem_id)
+            existing_event = unique_events.get(key)
+            if existing_event is None:
+                unique_events[key] = connector_event
+                continue
+            unique_events[key] = cls._merge_connector_events(
+                existing_event,
+                connector_event,
+            )
+
+        return [*unique_events.values(), *events_without_problem_id]
+
+    @staticmethod
+    def _merge_connector_events(
+        current_event: ConnectorEvent,
+        next_event: ConnectorEvent,
+    ) -> ConnectorEvent:
+        """Merge repeated connector events that represent the same source problem."""
+        status = next_event.status or current_event.status
+        if current_event.status == "resolved" or next_event.status == "resolved":
+            status = "resolved"
+
+        started_at_values = [
+            value
+            for value in (current_event.started_at, next_event.started_at)
+            if value is not None
+        ]
+        resolved_at_values = [
+            value
+            for value in (current_event.resolved_at, next_event.resolved_at)
+            if value is not None
+        ]
+
+        return current_event.model_copy(
+            update={
+                "host": next_event.host or current_event.host,
+                "severity": next_event.severity or current_event.severity,
+                "status": status,
+                "problem_name": next_event.problem_name or current_event.problem_name,
+                "started_at": min(started_at_values) if started_at_values else None,
+                "resolved_at": max(resolved_at_values) if resolved_at_values else None,
+                "duration": next_event.duration or current_event.duration,
+                "raw_payload": next_event.raw_payload or current_event.raw_payload,
+            }
         )
 
     @staticmethod
