@@ -98,6 +98,8 @@ class ReportService:
                 problem_name=event.problem_name,
                 started_at=event.started_at,
                 details_available=bool(event.problem_name or event.severity),
+                operational_data=self._normalized_value(event, "operational_data"),
+                links=self._normalized_links(event),
             )
             for event in events
         ]
@@ -123,7 +125,8 @@ class ReportService:
         warnings: list[str] = []
         if unnamed_events:
             warnings.append(
-                "Some Discord messages do not include readable alert text in content or embeds."
+                "Discord returned messages without readable content or embeds. Enable Message "
+                "Content Intent for the bot, then sync again."
             )
         if unknown_severity_events:
             warnings.append(
@@ -151,3 +154,21 @@ class ReportService:
         if event.problem_id:
             return f"Discord message {event.problem_id[-6:]}"
         return "Discord message without readable details"
+
+    @staticmethod
+    def _normalized_value(event: Event, key: str) -> str | None:
+        normalized = event.raw_payload.get("normalized")
+        if not isinstance(normalized, dict):
+            return None
+        value = normalized.get(key)
+        return str(value) if value else None
+
+    @staticmethod
+    def _normalized_links(event: Event) -> list[str]:
+        normalized = event.raw_payload.get("normalized")
+        if not isinstance(normalized, dict):
+            return []
+        links = normalized.get("links")
+        if not isinstance(links, list):
+            return []
+        return [str(link) for link in links if link]

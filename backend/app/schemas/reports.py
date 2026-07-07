@@ -39,6 +39,8 @@ class WeeklyDiscordReportEventResponse(BaseModel):
     problem_name: str | None
     started_at: datetime | None
     details_available: bool
+    operational_data: str | None
+    links: list[str]
 
 
 class WeeklyDiscordReportDataQualityResponse(BaseModel):

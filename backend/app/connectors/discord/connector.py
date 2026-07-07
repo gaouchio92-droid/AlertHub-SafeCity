@@ -1,11 +1,11 @@
 """Discord connector implementation."""
 
-from datetime import datetime
 from typing import Any
 
 import httpx
 
 from app.connectors.base import BaseConnector, ConnectorEvent, ConnectorStatus
+from app.connectors.discord.parser import parse_discord_zabbix_events
 from app.core.config.settings import Settings
 from app.core.logging import get_logger
 
@@ -74,28 +74,11 @@ class DiscordConnector(BaseConnector):
 
     async def sync(self) -> list[ConnectorEvent]:
         """Collect and normalize Discord messages."""
-        return [self.parse(payload) for payload in await self.collect()]
+        events: list[ConnectorEvent] = []
+        for payload in await self.collect():
+            events.extend(parse_discord_zabbix_events(payload, source=self.source))
+        return events
 
     def parse(self, payload: dict[str, Any]) -> ConnectorEvent:
         """Normalize one Discord message payload."""
-        timestamp = payload.get("timestamp")
-        started_at = (
-            datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
-            if isinstance(timestamp, str)
-            else None
-        )
-        author_payload = payload.get("author")
-        author: dict[str, Any] = author_payload if isinstance(author_payload, dict) else {}
-
-        return ConnectorEvent(
-            source=self.source,
-            problem_id=str(payload.get("id")) if payload.get("id") else None,
-            host=str(author.get("username")) if author.get("username") else None,
-            severity=None,
-            status="received",
-            problem_name=str(payload.get("content"))[:255] if payload.get("content") else None,
-            started_at=started_at,
-            resolved_at=None,
-            duration=None,
-            raw_payload=payload,
-        )
+        return parse_discord_zabbix_events(payload, source=self.source)[0]

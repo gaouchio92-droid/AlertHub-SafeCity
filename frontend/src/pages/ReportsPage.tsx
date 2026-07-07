@@ -161,6 +161,7 @@ export function ReportsPage() {
                 <th className="py-3 pr-4">Host</th>
                 <th className="py-3 pr-4">Severity</th>
                 <th className="py-3 pr-4">Status</th>
+                <th className="py-3 pr-4">Links</th>
                 <th className="py-3 pr-4">Received</th>
               </tr>
             </thead>
@@ -174,10 +175,27 @@ export function ReportsPage() {
                         Raw Discord message stored, readable alert fields not detected yet.
                       </p>
                     ) : null}
+                    {event.operational_data ? (
+                      <p className="mt-1 text-xs text-slate-400">{event.operational_data}</p>
+                    ) : null}
                   </td>
                   <td className="py-3 pr-4">{event.host ?? 'Not detected'}</td>
                   <td className="py-3 pr-4">{event.severity ?? 'Not detected'}</td>
                   <td className="py-3 pr-4">{event.status ?? 'unknown'}</td>
+                  <td className="py-3 pr-4">
+                    {event.links.length > 0 ? (
+                      <a
+                        href={event.links[0]}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-cyan-300 underline-offset-4 hover:underline"
+                      >
+                        Open
+                      </a>
+                    ) : (
+                      'No link'
+                    )}
+                  </td>
                   <td className="py-3 pr-4">{formatDateTime(event.started_at)}</td>
                 </tr>
               ))}

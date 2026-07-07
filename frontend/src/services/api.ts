@@ -78,6 +78,8 @@ export type WeeklyDiscordReportEvent = {
   problem_name: string | null;
   started_at: string | null;
   details_available: boolean;
+  operational_data: string | null;
+  links: string[];
 };
 
 export type WeeklyDiscordReportDataQuality = {
