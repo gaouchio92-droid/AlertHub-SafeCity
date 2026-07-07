@@ -45,3 +45,18 @@ def test_deduplicate_connector_events_merges_repeated_problem_updates() -> None:
     assert events[0].resolved_at == resolved_at
     assert events[0].duration == 900
     assert events[0].raw_payload == {"message": "resolved"}
+
+
+def test_normalized_discord_message_id_returns_message_id() -> None:
+    """Discord message IDs from normalized payloads can supersede placeholders."""
+    event = ConnectorEvent(
+        source="discord",
+        problem_id="51548",
+        status="resolved",
+        raw_payload={"normalized": {"discord_message_id": "1524089260699943118"}},
+    )
+
+    assert (
+        EventService._normalized_discord_message_id(event)
+        == "1524089260699943118"
+    )

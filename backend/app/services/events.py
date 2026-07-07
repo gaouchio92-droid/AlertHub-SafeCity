@@ -1,6 +1,6 @@
 """Event query services."""
 
-from sqlalchemy import Select, func, select
+from sqlalchemy import Select, delete, func, select
 from sqlalchemy.orm import Session
 
 from app.connectors.base import ConnectorEvent
@@ -30,9 +30,15 @@ class EventService:
         source: str | None = None,
         status: str | None = None,
         severity: str | None = None,
+        include_unparsed: bool = False,
     ) -> tuple[list[Event], int]:
         """Return paginated events ordered by newest first."""
-        statement = self._base_query(source=source, status=status, severity=severity)
+        statement = self._base_query(
+            source=source,
+            status=status,
+            severity=severity,
+            include_unparsed=include_unparsed,
+        )
         total = self._db.scalar(
             select(func.count()).select_from(statement.subquery())
         )
@@ -62,6 +68,7 @@ class EventService:
             self._apply_connector_event(event, connector_event)
             updated += 1
 
+        self._delete_superseded_placeholder_events(connector_events)
         self._db.commit()
         return EventIngestionResult(
             received=len(connector_events),
@@ -129,12 +136,43 @@ class EventService:
             }
         )
 
+    def _delete_superseded_placeholder_events(
+        self,
+        connector_events: list[ConnectorEvent],
+    ) -> None:
+        """Remove old unreadable Discord placeholders once parsed events exist."""
+        message_ids_by_source: dict[str, set[str]] = {}
+        for connector_event in connector_events:
+            discord_message_id = self._normalized_discord_message_id(connector_event)
+            if discord_message_id:
+                message_ids_by_source.setdefault(connector_event.source, set()).add(
+                    discord_message_id
+                )
+
+        for source, message_ids in message_ids_by_source.items():
+            self._db.execute(
+                delete(Event).where(
+                    Event.source == source,
+                    Event.problem_id.in_(message_ids),
+                    Event.problem_name.is_(None),
+                )
+            )
+
+    @staticmethod
+    def _normalized_discord_message_id(connector_event: ConnectorEvent) -> str | None:
+        normalized = connector_event.raw_payload.get("normalized")
+        if not isinstance(normalized, dict):
+            return None
+        message_id = normalized.get("discord_message_id")
+        return str(message_id) if message_id else None
+
     @staticmethod
     def _base_query(
         *,
         source: str | None,
         status: str | None,
         severity: str | None,
+        include_unparsed: bool,
     ) -> Select[tuple[Event]]:
         statement = select(Event)
         if source:
@@ -143,6 +181,8 @@ class EventService:
             statement = statement.where(Event.status == status)
         if severity:
             statement = statement.where(Event.severity == severity)
+        if not include_unparsed:
+            statement = statement.where(Event.problem_name.is_not(None))
         return statement
 
     def _find_existing_event(self, connector_event: ConnectorEvent) -> Event | None:

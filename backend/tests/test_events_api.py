@@ -20,6 +20,7 @@ class StubEventService:
     last_source: str | None = None
     last_status: str | None = None
     last_severity: str | None = None
+    last_include_unparsed: bool | None = None
 
     def __init__(self, db: object) -> None:
         self._db = db
@@ -32,6 +33,7 @@ class StubEventService:
         source: str | None = None,
         status: str | None = None,
         severity: str | None = None,
+        include_unparsed: bool = False,
     ) -> tuple[list[EventResponse], int]:
         """Return deterministic API test data."""
         StubEventService.last_limit = limit
@@ -39,6 +41,7 @@ class StubEventService:
         StubEventService.last_source = source
         StubEventService.last_status = status
         StubEventService.last_severity = severity
+        StubEventService.last_include_unparsed = include_unparsed
         timestamp = datetime(2026, 7, 6, 12, 0, tzinfo=UTC)
         return [
             EventResponse(
@@ -124,6 +127,17 @@ def test_list_events_returns_paginated_events(monkeypatch: object) -> None:
     assert StubEventService.last_source == "discord"
     assert StubEventService.last_status == "problem"
     assert StubEventService.last_severity == "high"
+    assert StubEventService.last_include_unparsed is False
+
+
+def test_list_events_can_include_unparsed_events(monkeypatch: object) -> None:
+    monkeypatch.setattr(events_endpoint, "EventService", StubEventService)
+    client = TestClient(app)
+
+    response = client.get("/api/v1/events", params={"include_unparsed": "true"})
+
+    assert response.status_code == 200
+    assert StubEventService.last_include_unparsed is True
 
 
 def test_list_events_validates_limit() -> None:

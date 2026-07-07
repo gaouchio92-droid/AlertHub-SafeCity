@@ -21,6 +21,7 @@ def list_events(
     source: Annotated[str | None, Query(max_length=64)] = None,
     status: Annotated[str | None, Query(max_length=64)] = None,
     severity: Annotated[str | None, Query(max_length=64)] = None,
+    include_unparsed: bool = False,
 ) -> EventListResponse:
     """Return normalized events stored by connector ingestion."""
     events, total = EventService(db).list_events(
@@ -29,6 +30,7 @@ def list_events(
         source=source,
         status=status,
         severity=severity,
+        include_unparsed=include_unparsed,
     )
     return EventListResponse(
         items=[EventResponse.model_validate(event) for event in events],
