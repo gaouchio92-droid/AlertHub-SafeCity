@@ -3,7 +3,7 @@
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field, PostgresDsn, computed_field
+from pydantic import Field, PostgresDsn, computed_field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -55,6 +55,39 @@ class Settings(BaseSettings):
     jwt_expire_minutes: int = 60
 
     log_level: str = "INFO"
+
+    @model_validator(mode="after")
+    def validate_production_secrets(self) -> "Settings":
+        """Reject placeholder or missing secrets in production."""
+        if not self.is_production:
+            return self
+
+        insecure_values = {
+            "change-me-with-a-secure-secret-key-32",
+            "change-me-with-a-secure-jwt-secret-32",
+            "replace-with-a-secure-random-secret-key",
+            "replace-with-a-secure-random-jwt-secret",
+            "replace-with-a-secure-database-password",
+            "alerthub_password",
+        }
+        required_secrets = {
+            "SECRET_KEY": self.secret_key,
+            "POSTGRES_PASSWORD": self.postgres_password,
+            "JWT_SECRET": self.jwt_secret,
+        }
+        if self.enable_discord:
+            required_secrets["DISCORD_TOKEN"] = self.discord_token
+            required_secrets["DISCORD_CHANNEL_ID"] = self.discord_channel_id
+
+        invalid_names = [
+            name
+            for name, value in required_secrets.items()
+            if not value or value in insecure_values
+        ]
+        if invalid_names:
+            names = ", ".join(sorted(invalid_names))
+            raise ValueError(f"Production requires secure values for: {names}")
+        return self
 
     @computed_field  # type: ignore[prop-decorator]
     @property

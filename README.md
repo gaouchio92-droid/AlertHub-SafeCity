@@ -150,12 +150,15 @@ is ready only when `DISCORD_TOKEN` and `DISCORD_CHANNEL_ID` are configured.
 For production deployments:
 
 - Replace all default secrets.
+- Set `APP_ENV=production`; the backend refuses placeholder or missing production secrets.
 - Use managed secret storage.
 - Restrict CORS origins to approved domains.
 - Publish images through a trusted container registry.
 - Terminate TLS at the load balancer or Nginx edge.
 - Configure backup and retention policies for PostgreSQL.
 - Ship logs and metrics to the organization observability platform.
+
+See [SECURITY.md](SECURITY.md) for token rotation, GitHub SSH, and secret-handling guidance.
 
 ## Project Structure
 
