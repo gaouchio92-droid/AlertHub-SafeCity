@@ -358,14 +358,6 @@ function DiscordReachabilityPanel({
           ) : null}
         </div>
       ) : null}
-      <div className="mt-4 grid gap-3 sm:grid-cols-3">
-        <MetricCard label={t.reports.noAlertTitle} value={report?.data_quality.unnamed_events ?? 0} />
-        <MetricCard
-          label={t.reports.noSeverity}
-          value={report?.data_quality.unknown_severity_events ?? 0}
-        />
-        <MetricCard label={t.reports.noHost} value={report?.data_quality.unknown_host_events ?? 0} />
-      </div>
       <div className="mt-4 space-y-2">
         {warnings.map((warning) => (
           <p key={warning} className="text-sm text-amber-100">
