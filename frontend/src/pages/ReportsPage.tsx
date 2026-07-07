@@ -1,14 +1,36 @@
-import { useEffect, useState } from 'react';
-import { CalendarClock, RefreshCw, Server } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import {
+  AlertTriangle,
+  CalendarClock,
+  CheckCircle2,
+  Database,
+  RefreshCw,
+  Server,
+} from 'lucide-react';
 
 import {
   EventSyncResult,
   WeeklyDiscordReport,
+  WeeklyDiscordReportMetric,
   WeeklyDiscordReportStatus,
   getWeeklyDiscordReport,
   getWeeklyDiscordReportStatus,
   syncEvents,
 } from '../services/api';
+
+function formatDateTime(value: string | null) {
+  if (!value) {
+    return 'No timestamp';
+  }
+  return new Date(value).toLocaleString();
+}
+
+function formatPeriod(report: WeeklyDiscordReport | null) {
+  if (!report) {
+    return 'Loading period';
+  }
+  return `${formatDateTime(report.period_start)} to ${formatDateTime(report.period_end)}`;
+}
 
 export function ReportsPage() {
   const [status, setStatus] = useState<WeeklyDiscordReportStatus | null>(null);
@@ -16,6 +38,13 @@ export function ReportsPage() {
   const [syncResult, setSyncResult] = useState<EventSyncResult | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const readableEvents = useMemo(() => {
+    if (!report || report.total_events === 0) {
+      return 0;
+    }
+    return report.total_events - report.data_quality.unnamed_events;
+  }, [report]);
 
   async function loadReport() {
     try {
@@ -50,16 +79,28 @@ export function ReportsPage() {
 
   return (
     <section className="space-y-6">
-      <div>
-        <p className="text-sm font-semibold uppercase tracking-wide text-cyan-300">Reports</p>
-        <h2 className="mt-2 text-3xl font-semibold text-white">Weekly Discord report</h2>
-        <p className="mt-3 max-w-3xl text-base leading-7 text-slate-300">
-          Rolling seven-day summary generated from normalized Discord events stored in PostgreSQL.
-        </p>
+      <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+        <div>
+          <p className="text-sm font-semibold uppercase tracking-wide text-cyan-300">Reports</p>
+          <h2 className="mt-2 text-3xl font-semibold text-white">Discord weekly operations</h2>
+          <p className="mt-3 max-w-3xl text-base leading-7 text-slate-300">
+            A seven-day operational view of Discord events collected from the configured alert
+            channel and stored in PostgreSQL.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={handleSync}
+          disabled={isSyncing}
+          className="inline-flex items-center justify-center gap-2 rounded-md bg-cyan-400 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          <RefreshCw className={['h-4 w-4', isSyncing ? 'animate-spin' : ''].join(' ')} />
+          Sync Discord
+        </button>
       </div>
 
-      <div className="rounded-md border border-white/10 bg-white/[0.04] p-6">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+      <section className="rounded-md border border-white/10 bg-white/[0.04] p-6">
+        <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
           <div>
             <div className="flex items-center gap-3">
               <CalendarClock className="h-6 w-6 text-cyan-300" aria-hidden="true" />
@@ -67,108 +108,137 @@ export function ReportsPage() {
                 {status?.feature ?? 'Weekly Discord report'}
               </h3>
             </div>
-            <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-300">
+            <p className="mt-3 text-sm leading-6 text-slate-300">
               {status?.reason ?? 'Loading report status.'}
             </p>
+            <p className="mt-3 text-sm text-slate-400">{formatPeriod(report)}</p>
           </div>
-          <span
-            className={[
-              'rounded-md px-3 py-1.5 text-sm font-semibold',
-              status?.implemented
-                ? 'bg-emerald-400/10 text-emerald-300 ring-1 ring-emerald-400/20'
-                : 'bg-amber-400/10 text-amber-300 ring-1 ring-amber-400/20',
-            ].join(' ')}
-          >
-            {status?.implemented ? 'Implemented' : 'Not implemented'}
-          </span>
-        </div>
 
-        <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-sm text-slate-400">
-            {report
-              ? `${new Date(report.period_start).toLocaleString()} - ${new Date(
-                  report.period_end,
-                ).toLocaleString()}`
-              : 'Loading report period'}
-          </p>
-          <button
-            type="button"
-            onClick={handleSync}
-            disabled={isSyncing}
-            className="inline-flex items-center justify-center gap-2 rounded-md bg-cyan-400 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            <RefreshCw className={['h-4 w-4', isSyncing ? 'animate-spin' : ''].join(' ')} />
-            Sync Discord
-          </button>
-        </div>
-
-        {syncResult ? (
-          <p className="mt-3 text-sm text-emerald-300">
-            Sync complete: {syncResult.received} received, {syncResult.created} created,{' '}
-            {syncResult.updated} updated.
-          </p>
-        ) : null}
-
-        <div className="mt-6 grid gap-4 md:grid-cols-3">
-          {[
-            ['Total events', report?.total_events ?? 0],
-            ['Open events', report?.open_events ?? 0],
-            ['Resolved events', report?.resolved_events ?? 0],
-          ].map(([label, value]) => (
-            <div key={label} className="rounded-md border border-white/10 bg-slate-950/60 p-4">
-              <p className="text-sm text-slate-400">{label}</p>
-              <p className="mt-2 text-2xl font-semibold text-white">{value}</p>
+          <div className="rounded-md border border-emerald-400/20 bg-emerald-400/[0.06] p-4">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="h-5 w-5 text-emerald-300" aria-hidden="true" />
+              <p className="text-sm font-semibold text-emerald-200">Pipeline active</p>
             </div>
-          ))}
-        </div>
-
-        <div className="mt-6 grid gap-4 lg:grid-cols-2">
-          <MetricList title="By host" items={report?.by_host ?? []} />
-          <MetricList title="By severity" items={report?.by_severity ?? []} />
-        </div>
-
-        <div className="mt-6">
-          <h4 className="text-sm font-semibold text-white">Recent Discord events</h4>
-          <div className="mt-3 divide-y divide-white/10 overflow-hidden rounded-md border border-white/10">
-            {(report?.recent_events ?? []).map((event) => (
-              <div key={event.problem_id ?? event.started_at} className="bg-slate-950/60 p-4">
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <p className="font-medium text-white">
-                    {event.problem_name || event.problem_id || 'Discord event'}
-                  </p>
-                  <span className="text-xs uppercase tracking-wide text-cyan-300">
-                    {event.status ?? 'unknown'}
-                  </span>
-                </div>
-                <p className="mt-2 text-sm text-slate-400">
-                  {event.host ?? 'Unknown host'} · {event.severity ?? 'Unknown severity'} ·{' '}
-                  {event.started_at ? new Date(event.started_at).toLocaleString() : 'No timestamp'}
-                </p>
-              </div>
-            ))}
-            {report?.recent_events.length === 0 ? (
-              <p className="bg-slate-950/60 p-4 text-sm text-slate-400">
-                No Discord events stored for this period.
+            <p className="mt-3 text-sm leading-6 text-slate-300">
+              Discord is configured, sync is available, and events are persisted locally before
+              reporting.
+            </p>
+            {syncResult ? (
+              <p className="mt-3 text-sm text-emerald-200">
+                Last sync: {syncResult.received} read, {syncResult.created} new,{' '}
+                {syncResult.updated} refreshed.
               </p>
             ) : null}
           </div>
         </div>
 
-        {error ? <p className="mt-4 text-sm text-rose-300">{error}</p> : null}
-      </div>
+        <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <MetricCard label="Discord messages" value={report?.total_events ?? 0} />
+          <MetricCard label="Readable alerts" value={readableEvents} />
+          <MetricCard label="Still open" value={report?.open_events ?? 0} />
+          <MetricCard label="Resolved" value={report?.resolved_events ?? 0} />
+        </div>
+      </section>
+
+      <section className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
+        <DataQualityPanel report={report} />
+        <div className="grid gap-4 md:grid-cols-2">
+          <MetricList title="Detected hosts" items={report?.by_host ?? []} />
+          <MetricList title="Detected severities" items={report?.by_severity ?? []} />
+        </div>
+      </section>
+
+      <section className="rounded-md border border-white/10 bg-white/[0.04] p-6">
+        <div className="flex items-center gap-2">
+          <Database className="h-5 w-5 text-cyan-300" aria-hidden="true" />
+          <h3 className="text-lg font-semibold text-white">Recent stored events</h3>
+        </div>
+        <div className="mt-4 overflow-x-auto">
+          <table className="w-full min-w-[760px] text-left text-sm">
+            <thead className="border-b border-white/10 text-xs uppercase tracking-wide text-slate-500">
+              <tr>
+                <th className="py-3 pr-4">Event</th>
+                <th className="py-3 pr-4">Host</th>
+                <th className="py-3 pr-4">Severity</th>
+                <th className="py-3 pr-4">Status</th>
+                <th className="py-3 pr-4">Received</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/10">
+              {(report?.recent_events ?? []).map((event) => (
+                <tr key={event.problem_id ?? event.started_at} className="text-slate-300">
+                  <td className="py-3 pr-4">
+                    <p className="font-medium text-white">{event.title}</p>
+                    {!event.details_available ? (
+                      <p className="mt-1 text-xs text-amber-300">
+                        Raw Discord message stored, readable alert fields not detected yet.
+                      </p>
+                    ) : null}
+                  </td>
+                  <td className="py-3 pr-4">{event.host ?? 'Not detected'}</td>
+                  <td className="py-3 pr-4">{event.severity ?? 'Not detected'}</td>
+                  <td className="py-3 pr-4">{event.status ?? 'unknown'}</td>
+                  <td className="py-3 pr-4">{formatDateTime(event.started_at)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {report?.recent_events.length === 0 ? (
+            <p className="rounded-md border border-white/10 bg-slate-950/60 p-4 text-sm text-slate-400">
+              No Discord events stored for this period.
+            </p>
+          ) : null}
+        </div>
+      </section>
+
+      {error ? <p className="text-sm text-rose-300">{error}</p> : null}
     </section>
   );
 }
 
-function MetricList({
-  title,
-  items,
-}: {
-  title: string;
-  items: { label: string; value: number }[];
-}) {
+function MetricCard({ label, value }: { label: string; value: number }) {
   return (
     <div className="rounded-md border border-white/10 bg-slate-950/60 p-4">
+      <p className="text-sm text-slate-400">{label}</p>
+      <p className="mt-2 text-3xl font-semibold text-white">{value}</p>
+    </div>
+  );
+}
+
+function DataQualityPanel({ report }: { report: WeeklyDiscordReport | null }) {
+  const warnings = report?.data_quality.warnings ?? [];
+  return (
+    <div className="rounded-md border border-amber-300/20 bg-amber-300/[0.06] p-5">
+      <div className="flex items-center gap-2">
+        <AlertTriangle className="h-5 w-5 text-amber-200" aria-hidden="true" />
+        <h3 className="text-base font-semibold text-white">Data readability</h3>
+      </div>
+      <p className="mt-3 text-sm leading-6 text-slate-300">
+        The report can count every stored Discord message. Alert names, severities, and resolved
+        states become recognizable once the exact Zabbix message format is present in the payload.
+      </p>
+      <div className="mt-4 grid gap-3 sm:grid-cols-3">
+        <MetricCard label="No alert title" value={report?.data_quality.unnamed_events ?? 0} />
+        <MetricCard
+          label="No severity"
+          value={report?.data_quality.unknown_severity_events ?? 0}
+        />
+        <MetricCard label="No host" value={report?.data_quality.unknown_host_events ?? 0} />
+      </div>
+      <div className="mt-4 space-y-2">
+        {warnings.map((warning) => (
+          <p key={warning} className="text-sm text-amber-100">
+            {warning}
+          </p>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function MetricList({ title, items }: { title: string; items: WeeklyDiscordReportMetric[] }) {
+  return (
+    <div className="rounded-md border border-white/10 bg-white/[0.04] p-5">
       <div className="flex items-center gap-2">
         <Server className="h-4 w-4 text-cyan-300" aria-hidden="true" />
         <h4 className="text-sm font-semibold text-white">{title}</h4>

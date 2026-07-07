@@ -32,11 +32,24 @@ class WeeklyDiscordReportEventResponse(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     problem_id: str | None
+    title: str
     host: str | None
     severity: str | None
     status: str | None
     problem_name: str | None
     started_at: datetime | None
+    details_available: bool
+
+
+class WeeklyDiscordReportDataQualityResponse(BaseModel):
+    """Data quality counters for the weekly report."""
+
+    model_config = ConfigDict(frozen=True)
+
+    unnamed_events: int
+    unknown_severity_events: int
+    unknown_host_events: int
+    warnings: list[str]
 
 
 class WeeklyDiscordReportResponse(BaseModel):
@@ -50,6 +63,7 @@ class WeeklyDiscordReportResponse(BaseModel):
     total_events: int
     open_events: int
     resolved_events: int
+    data_quality: WeeklyDiscordReportDataQualityResponse
     by_severity: list[WeeklyDiscordReportMetricResponse]
     by_host: list[WeeklyDiscordReportMetricResponse]
     recent_events: list[WeeklyDiscordReportEventResponse]

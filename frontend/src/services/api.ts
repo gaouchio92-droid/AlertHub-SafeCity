@@ -71,11 +71,20 @@ export type WeeklyDiscordReportMetric = {
 
 export type WeeklyDiscordReportEvent = {
   problem_id: string | null;
+  title: string;
   host: string | null;
   severity: string | null;
   status: string | null;
   problem_name: string | null;
   started_at: string | null;
+  details_available: boolean;
+};
+
+export type WeeklyDiscordReportDataQuality = {
+  unnamed_events: number;
+  unknown_severity_events: number;
+  unknown_host_events: number;
+  warnings: string[];
 };
 
 export type WeeklyDiscordReport = {
@@ -85,6 +94,7 @@ export type WeeklyDiscordReport = {
   total_events: number;
   open_events: number;
   resolved_events: number;
+  data_quality: WeeklyDiscordReportDataQuality;
   by_severity: WeeklyDiscordReportMetric[];
   by_host: WeeklyDiscordReportMetric[];
   recent_events: WeeklyDiscordReportEvent[];

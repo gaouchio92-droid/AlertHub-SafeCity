@@ -3,11 +3,12 @@
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import InstrumentedAttribute, Session
 from sqlalchemy.sql.elements import ColumnElement
 
 from app.models.event import Event
 from app.schemas.reports import (
+    WeeklyDiscordReportDataQualityResponse,
     WeeklyDiscordReportEventResponse,
     WeeklyDiscordReportMetricResponse,
     WeeklyDiscordReportResponse,
@@ -38,6 +39,9 @@ class ReportService:
             .select_from(Event)
             .where(*base_filters, Event.resolved_at.is_not(None))
         ) or 0
+        unnamed_events = self._count_missing(Event.problem_name, base_filters)
+        unknown_severity_events = self._count_missing(Event.severity, base_filters)
+        unknown_host_events = self._count_missing(Event.host, base_filters)
 
         return WeeklyDiscordReportResponse(
             source="discord",
@@ -46,6 +50,11 @@ class ReportService:
             total_events=total_events,
             open_events=max(total_events - resolved_events, 0),
             resolved_events=resolved_events,
+            data_quality=self._data_quality(
+                unnamed_events=unnamed_events,
+                unknown_severity_events=unknown_severity_events,
+                unknown_host_events=unknown_host_events,
+            ),
             by_severity=self._metrics("severity", base_filters),
             by_host=self._metrics("host", base_filters),
             recent_events=self._recent_events(base_filters),
@@ -65,7 +74,7 @@ class ReportService:
             .limit(10)
         ).all()
         return [
-            WeeklyDiscordReportMetricResponse(label=str(label or "Unknown"), value=count)
+            WeeklyDiscordReportMetricResponse(label=self._display_label(label), value=count)
             for label, count in rows
         ]
 
@@ -82,11 +91,63 @@ class ReportService:
         return [
             WeeklyDiscordReportEventResponse(
                 problem_id=event.problem_id,
+                title=self._event_title(event),
                 host=event.host,
                 severity=event.severity,
                 status=event.status,
                 problem_name=event.problem_name,
                 started_at=event.started_at,
+                details_available=bool(event.problem_name or event.severity),
             )
             for event in events
         ]
+
+    def _count_missing(
+        self,
+        column: ColumnElement[str | None] | InstrumentedAttribute[str | None],
+        base_filters: tuple[ColumnElement[bool], ...],
+    ) -> int:
+        return self._db.scalar(
+            select(func.count())
+            .select_from(Event)
+            .where(*base_filters, column.is_(None))
+        ) or 0
+
+    @staticmethod
+    def _data_quality(
+        *,
+        unnamed_events: int,
+        unknown_severity_events: int,
+        unknown_host_events: int,
+    ) -> WeeklyDiscordReportDataQualityResponse:
+        warnings: list[str] = []
+        if unnamed_events:
+            warnings.append(
+                "Some Discord messages do not include readable alert text in content or embeds."
+            )
+        if unknown_severity_events:
+            warnings.append(
+                "Severity is unknown until the Zabbix Discord message format is parsed."
+            )
+        if unknown_host_events:
+            warnings.append("Some events do not include a detectable host.")
+        return WeeklyDiscordReportDataQualityResponse(
+            unnamed_events=unnamed_events,
+            unknown_severity_events=unknown_severity_events,
+            unknown_host_events=unknown_host_events,
+            warnings=warnings,
+        )
+
+    @staticmethod
+    def _display_label(value: object) -> str:
+        if value is None or str(value).strip() == "":
+            return "Not detected yet"
+        return str(value)
+
+    @staticmethod
+    def _event_title(event: Event) -> str:
+        if event.problem_name:
+            return event.problem_name
+        if event.problem_id:
+            return f"Discord message {event.problem_id[-6:]}"
+        return "Discord message without readable details"
