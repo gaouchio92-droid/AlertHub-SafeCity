@@ -10,11 +10,13 @@ import {
 } from 'lucide-react';
 
 import {
+  ConnectorDiagnostic,
   EventSyncResult,
   WeeklyDiscordReport,
   WeeklyDiscordReportDailyTrend,
   WeeklyDiscordReportMetric,
   WeeklyDiscordReportStatus,
+  getConnectorDiagnostics,
   getWeeklyDiscordReport,
   getWeeklyDiscordReportStatus,
   syncEvents,
@@ -37,6 +39,7 @@ function formatPeriod(report: WeeklyDiscordReport | null) {
 export function ReportsPage() {
   const [status, setStatus] = useState<WeeklyDiscordReportStatus | null>(null);
   const [report, setReport] = useState<WeeklyDiscordReport | null>(null);
+  const [discordDiagnostic, setDiscordDiagnostic] = useState<ConnectorDiagnostic | null>(null);
   const [syncResult, setSyncResult] = useState<EventSyncResult | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -50,12 +53,16 @@ export function ReportsPage() {
 
   async function loadReport() {
     try {
-      const [statusResponse, reportResponse] = await Promise.all([
+      const [statusResponse, reportResponse, diagnosticsResponse] = await Promise.all([
         getWeeklyDiscordReportStatus(),
         getWeeklyDiscordReport(),
+        getConnectorDiagnostics(),
       ]);
       setStatus(statusResponse);
       setReport(reportResponse);
+      setDiscordDiagnostic(
+        diagnosticsResponse.find((diagnostic) => diagnostic.source === 'discord') ?? null,
+      );
       setError(null);
     } catch {
       setError('Weekly report unavailable');
@@ -164,7 +171,7 @@ export function ReportsPage() {
       <StabilizationRecommendationsPanel report={report} />
 
       <section className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
-        <DataQualityPanel report={report} />
+        <DiscordReachabilityPanel report={report} diagnostic={discordDiagnostic} />
         <div className="grid gap-4 md:grid-cols-2">
           <MetricList title="Detected hosts" items={report?.by_host ?? []} />
           <MetricList title="Detected severities" items={report?.by_severity ?? []} />
@@ -287,18 +294,68 @@ function MetricCard({ label, value }: { label: string; value: number }) {
   );
 }
 
-function DataQualityPanel({ report }: { report: WeeklyDiscordReport | null }) {
+function DiscordReachabilityPanel({
+  report,
+  diagnostic,
+}: {
+  report: WeeklyDiscordReport | null;
+  diagnostic: ConnectorDiagnostic | null;
+}) {
   const warnings = report?.data_quality.warnings ?? [];
+  const isReachable = diagnostic?.ready ?? false;
+  const missingConfiguration = diagnostic?.missing_configuration ?? [];
+  const panelTone = isReachable
+    ? 'border-emerald-300/25 bg-emerald-300/[0.07]'
+    : 'border-rose-300/25 bg-rose-300/[0.07]';
+  const statusTone = isReachable
+    ? 'bg-emerald-400/10 text-emerald-200 ring-1 ring-emerald-300/25'
+    : 'bg-rose-400/10 text-rose-200 ring-1 ring-rose-300/25';
+  const Icon = isReachable ? CheckCircle2 : AlertTriangle;
+
   return (
-    <div className="rounded-md border border-amber-300/20 bg-amber-300/[0.06] p-5">
-      <div className="flex items-center gap-2">
-        <AlertTriangle className="h-5 w-5 text-amber-200" aria-hidden="true" />
-        <h3 className="text-base font-semibold text-white">Data readability</h3>
+    <div className={['rounded-md border p-5', panelTone].join(' ')}>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex items-center gap-2">
+          <Icon
+            className={['h-5 w-5', isReachable ? 'text-emerald-200' : 'text-rose-200'].join(' ')}
+            aria-hidden="true"
+          />
+          <h3 className="text-base font-semibold text-white">Discord reachability</h3>
+        </div>
+        <span
+          className={[
+            'inline-flex w-fit items-center rounded-md px-2.5 py-1 text-xs font-semibold',
+            statusTone,
+          ].join(' ')}
+        >
+          {isReachable ? 'Link healthy' : 'Link interrupted'}
+        </span>
       </div>
       <p className="mt-3 text-sm leading-6 text-slate-300">
-        The report can count every stored Discord message. Alert names, severities, and resolved
-        states become recognizable once the exact Zabbix message format is present in the payload.
+        Discord configuration is checked from the connector engine. When the link is healthy,
+        AlertHub can synchronize the configured channel. Message parsing quality is shown below.
       </p>
+      {!isReachable ? (
+        <div className="mt-4 rounded-md border border-rose-300/20 bg-slate-950/60 p-3">
+          <p className="text-sm font-semibold text-rose-100">Connection action required</p>
+          <p className="mt-2 text-sm leading-6 text-slate-300">
+            Verify the bot token, channel ID, guild ID, and restart Docker Compose after updating
+            the `.env` file.
+          </p>
+          {missingConfiguration.length > 0 ? (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {missingConfiguration.map((field) => (
+                <span
+                  key={field}
+                  className="rounded-md bg-rose-400/10 px-2 py-1 font-mono text-xs text-rose-100"
+                >
+                  {field}
+                </span>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
       <div className="mt-4 grid gap-3 sm:grid-cols-3">
         <MetricCard label="No alert title" value={report?.data_quality.unnamed_events ?? 0} />
         <MetricCard
