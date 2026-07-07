@@ -29,6 +29,7 @@ class ReportService:
             Event.source == "discord",
             Event.started_at >= period_start,
             Event.started_at <= period_end,
+            Event.problem_name.is_not(None),
         )
 
         total_events = self._db.scalar(
