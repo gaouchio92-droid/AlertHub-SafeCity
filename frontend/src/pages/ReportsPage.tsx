@@ -4,6 +4,7 @@ import {
   CalendarClock,
   CheckCircle2,
   Database,
+  FileDown,
   RefreshCw,
   Server,
 } from 'lucide-react';
@@ -14,6 +15,7 @@ import {
   WeeklyDiscordReportDailyTrend,
   WeeklyDiscordReportMetric,
   WeeklyDiscordReportStatus,
+  exportWeeklyDiscordReport,
   getWeeklyDiscordReport,
   getWeeklyDiscordReportStatus,
   syncEvents,
@@ -38,6 +40,7 @@ export function ReportsPage() {
   const [report, setReport] = useState<WeeklyDiscordReport | null>(null);
   const [syncResult, setSyncResult] = useState<EventSyncResult | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const readableEvents = useMemo(() => {
@@ -78,6 +81,26 @@ export function ReportsPage() {
     }
   }
 
+  async function handleExport() {
+    setIsExporting(true);
+    try {
+      const blob = await exportWeeklyDiscordReport();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'alerthub-weekly-discord-report.md';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      setError(null);
+    } catch {
+      setError('Report export failed');
+    } finally {
+      setIsExporting(false);
+    }
+  }
+
   return (
     <section className="space-y-6">
       <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
@@ -89,15 +112,26 @@ export function ReportsPage() {
             channel and stored in PostgreSQL.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={handleSync}
-          disabled={isSyncing}
-          className="inline-flex items-center justify-center gap-2 rounded-md bg-cyan-400 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          <RefreshCw className={['h-4 w-4', isSyncing ? 'animate-spin' : ''].join(' ')} />
-          Sync Discord
-        </button>
+        <div className="flex flex-wrap gap-3">
+          <button
+            type="button"
+            onClick={handleExport}
+            disabled={isExporting}
+            className="inline-flex items-center justify-center gap-2 rounded-md border border-white/10 px-4 py-2 text-sm font-semibold text-slate-100 transition hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <FileDown className="h-4 w-4" aria-hidden="true" />
+            Export report
+          </button>
+          <button
+            type="button"
+            onClick={handleSync}
+            disabled={isSyncing}
+            className="inline-flex items-center justify-center gap-2 rounded-md bg-cyan-400 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <RefreshCw className={['h-4 w-4', isSyncing ? 'animate-spin' : ''].join(' ')} />
+            Sync Discord
+          </button>
+        </div>
       </div>
 
       <section className="rounded-md border border-white/10 bg-white/[0.04] p-6">
@@ -142,6 +176,8 @@ export function ReportsPage() {
       </section>
 
       <DailyTrendPanel items={report?.daily_trend ?? []} />
+
+      <StabilizationRecommendationsPanel report={report} />
 
       <section className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
         <DataQualityPanel report={report} />
@@ -213,6 +249,47 @@ export function ReportsPage() {
       </section>
 
       {error ? <p className="text-sm text-rose-300">{error}</p> : null}
+    </section>
+  );
+}
+
+function StabilizationRecommendationsPanel({ report }: { report: WeeklyDiscordReport | null }) {
+  const recommendations = [
+    'Planifier une synchronisation automatique Discord pour eviter les imports manuels.',
+    'Surveiller /api/v1/health et les healthchecks Docker avec une alerte externe.',
+    'Sauvegarder le volume PostgreSQL avant chaque mise a jour importante.',
+    'Activer une rotation des logs backend, nginx et Docker pour proteger le disque.',
+    'Executer Alembic dans le pipeline de deploiement avant redemarrage applicatif.',
+  ];
+
+  if ((report?.data_quality.unnamed_events ?? 0) > 0) {
+    recommendations.push(
+      'Finaliser le parsing Discord pour reduire les messages non lisibles dans les rapports.',
+    );
+  }
+
+  if ((report?.open_events ?? 0) > 0) {
+    recommendations.push(
+      'Mettre en place un suivi quotidien des problemes ouverts avec responsable assigne.',
+    );
+  }
+
+  return (
+    <section className="rounded-md border border-cyan-300/20 bg-cyan-300/[0.05] p-6">
+      <div className="flex items-center gap-2">
+        <CheckCircle2 className="h-5 w-5 text-cyan-200" aria-hidden="true" />
+        <h3 className="text-lg font-semibold text-white">Recommandations de stabilisation</h3>
+      </div>
+      <div className="mt-4 grid gap-3 md:grid-cols-2">
+        {recommendations.map((recommendation) => (
+          <div
+            key={recommendation}
+            className="rounded-md border border-white/10 bg-slate-950/60 p-4 text-sm leading-6 text-slate-300"
+          >
+            {recommendation}
+          </div>
+        ))}
+      </div>
     </section>
   );
 }

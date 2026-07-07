@@ -217,6 +217,13 @@ export async function getWeeklyDiscordReport(): Promise<WeeklyDiscordReport> {
   return response.data;
 }
 
+export async function exportWeeklyDiscordReport(): Promise<Blob> {
+  const response = await apiClient.get<Blob>('/reports/weekly-discord/export', {
+    responseType: 'blob',
+  });
+  return response.data;
+}
+
 export async function syncEvents(): Promise<EventSyncResult> {
   const response = await apiClient.post<EventSyncResult>('/events/sync');
   return response.data;

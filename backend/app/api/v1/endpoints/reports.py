@@ -3,6 +3,7 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends
+from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from app.database.session import get_db
@@ -45,3 +46,24 @@ def weekly_discord_report(
 ) -> WeeklyDiscordReportResponse:
     """Return a rolling seven-day Discord report."""
     return ReportService(db).build_weekly_discord_report()
+
+
+@router.get(
+    "/weekly-discord/export",
+    response_class=Response,
+    summary="Export weekly Discord management report",
+)
+def export_weekly_discord_report(
+    db: Annotated[Session, Depends(get_db)],
+) -> Response:
+    """Return a Markdown report suitable for management sharing."""
+    content = ReportService(db).build_weekly_discord_management_report()
+    return Response(
+        content=content,
+        media_type="text/markdown; charset=utf-8",
+        headers={
+            "Content-Disposition": (
+                'attachment; filename="alerthub-weekly-discord-report.md"'
+            ),
+        },
+    )

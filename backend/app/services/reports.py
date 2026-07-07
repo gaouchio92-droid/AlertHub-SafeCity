@@ -63,6 +63,57 @@ class ReportService:
             recent_events=self._recent_events(base_filters),
         )
 
+    def build_weekly_discord_management_report(self) -> str:
+        """Return a Markdown report suitable for operational management."""
+        report = self.build_weekly_discord_report()
+        readable_events = max(report.total_events - report.data_quality.unnamed_events, 0)
+        lines = [
+            "# Rapport hebdomadaire AlertHub Safe City",
+            "",
+            "## Synthese executive",
+            "",
+            (
+                f"Periode analysee: {report.period_start:%Y-%m-%d %H:%M UTC} "
+                f"au {report.period_end:%Y-%m-%d %H:%M UTC}."
+            ),
+            f"Source principale: {report.source}.",
+            f"Messages Discord analyses: {report.total_events}.",
+            f"Alertes lisibles: {readable_events}.",
+            f"Problemes encore ouverts: {report.open_events}.",
+            f"Problemes resolus: {report.resolved_events}.",
+            "",
+            "## Points de vigilance",
+            "",
+            *self._management_findings(report),
+            "",
+            "## Top equipements concernes",
+            "",
+            *self._metric_lines(report.by_host),
+            "",
+            "## Repartition par severite",
+            "",
+            *self._metric_lines(report.by_severity),
+            "",
+            "## Derniers evenements significatifs",
+            "",
+            *self._event_lines(report),
+            "",
+            "## Recommandations de stabilisation",
+            "",
+            *self._stabilization_recommendations(report),
+            "",
+            "## Prochaines actions conseillees",
+            "",
+            "- Planifier une revue quotidienne des problemes ouverts.",
+            "- Confirmer que le bot Discord a acces au bon salon d'alertes.",
+            "- Standardiser le format des messages Discord emis par la supervision.",
+            "- Surveiller les erreurs backend et la sante Docker Compose apres chaque deploiement.",
+            "",
+            "_Rapport genere automatiquement par AlertHub Safe City._",
+            "",
+        ]
+        return "\n".join(lines)
+
     def _metrics(
         self,
         field_name: str,
@@ -147,6 +198,71 @@ class ReportService:
             )
             for event in events
         ]
+
+    def _management_findings(
+        self,
+        report: WeeklyDiscordReportResponse,
+    ) -> list[str]:
+        findings: list[str] = []
+        if report.open_events:
+            findings.append(
+                f"- {report.open_events} probleme(s) restent ouverts et doivent etre suivis."
+            )
+        if report.data_quality.unnamed_events:
+            findings.append(
+                "- Certains messages Discord ne sont pas encore entierement lisibles par le "
+                "parseur."
+            )
+        if not report.total_events:
+            findings.append("- Aucun evenement Discord exploitable n'a ete detecte sur la periode.")
+        if not findings:
+            findings.append("- Aucun point critique detecte sur la periode.")
+        return findings
+
+    def _metric_lines(
+        self,
+        metrics: list[WeeklyDiscordReportMetricResponse],
+    ) -> list[str]:
+        if not metrics:
+            return ["- Aucune donnee disponible."]
+        return [f"- {metric.label}: {metric.value}" for metric in metrics[:10]]
+
+    def _event_lines(
+        self,
+        report: WeeklyDiscordReportResponse,
+    ) -> list[str]:
+        if not report.recent_events:
+            return ["- Aucun evenement recent disponible."]
+        return [
+            (
+                f"- {event.title} | host: {event.host or 'non detecte'} | "
+                f"severite: {event.severity or 'non detectee'} | "
+                f"statut: {event.status or 'unknown'}"
+            )
+            for event in report.recent_events[:8]
+        ]
+
+    def _stabilization_recommendations(
+        self,
+        report: WeeklyDiscordReportResponse,
+    ) -> list[str]:
+        recommendations = [
+            "- Garder PostgreSQL avec volume persistant et sauvegarde planifiee.",
+            "- Activer une rotation des logs backend, nginx et Docker.",
+            "- Ajouter une tache de synchronisation planifiee pour eviter les imports manuels.",
+            "- Mettre en place une alerte de sante sur /api/v1/health.",
+            "- Executer les migrations Alembic dans le pipeline de deploiement.",
+        ]
+        if report.data_quality.unnamed_events or report.data_quality.unknown_host_events:
+            recommendations.append(
+                "- Finaliser le parsing Discord pour extraire systematiquement host, severite, "
+                "statut, liens et nom du probleme."
+            )
+        if report.open_events:
+            recommendations.append(
+                "- Prioriser les problemes ouverts avec un suivi d'escalade par responsable."
+            )
+        return recommendations
 
     def _count_missing(
         self,
