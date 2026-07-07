@@ -79,7 +79,7 @@ def test_connector_configuration_guide_endpoint_lists_env_vars_without_values() 
     assert "Bot " not in response.text
 
 
-def test_weekly_discord_report_status_is_explicitly_not_implemented() -> None:
+def test_weekly_discord_report_status_is_implemented() -> None:
     client = TestClient(app)
 
     response = client.get("/api/v1/reports/weekly-discord/status")
@@ -87,9 +87,9 @@ def test_weekly_discord_report_status_is_explicitly_not_implemented() -> None:
     assert response.status_code == 200
     payload = response.json()
     assert payload["feature"] == "Weekly Discord report"
-    assert payload["implemented"] is False
+    assert payload["implemented"] is True
     assert payload["visible_in_ui"] is True
     assert any(
-        "Discord message ingestion" in item
+        "synchronization" in item
         for item in payload["required_before_available"]
     )

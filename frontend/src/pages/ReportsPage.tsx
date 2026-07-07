@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { CalendarClock, CheckCircle2, RefreshCw, Server } from 'lucide-react';
+import { CalendarClock, RefreshCw, Server } from 'lucide-react';
 
 import {
   EventSyncResult,

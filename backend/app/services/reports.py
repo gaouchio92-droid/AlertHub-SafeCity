@@ -4,6 +4,7 @@ from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
+from sqlalchemy.sql.elements import ColumnElement
 
 from app.models.event import Event
 from app.schemas.reports import (
@@ -23,7 +24,7 @@ class ReportService:
         """Return a rolling seven-day Discord event report."""
         period_end = datetime.now(UTC)
         period_start = period_end - timedelta(days=7)
-        base_filters = (
+        base_filters: tuple[ColumnElement[bool], ...] = (
             Event.source == "discord",
             Event.started_at >= period_start,
             Event.started_at <= period_end,
@@ -33,7 +34,9 @@ class ReportService:
             select(func.count()).select_from(Event).where(*base_filters)
         ) or 0
         resolved_events = self._db.scalar(
-            select(func.count()).select_from(Event).where(*base_filters, Event.resolved_at.is_not(None))
+            select(func.count())
+            .select_from(Event)
+            .where(*base_filters, Event.resolved_at.is_not(None))
         ) or 0
 
         return WeeklyDiscordReportResponse(
@@ -51,7 +54,7 @@ class ReportService:
     def _metrics(
         self,
         field_name: str,
-        base_filters: tuple[object, ...],
+        base_filters: tuple[ColumnElement[bool], ...],
     ) -> list[WeeklyDiscordReportMetricResponse]:
         column = getattr(Event, field_name)
         rows = self._db.execute(
@@ -68,7 +71,7 @@ class ReportService:
 
     def _recent_events(
         self,
-        base_filters: tuple[object, ...],
+        base_filters: tuple[ColumnElement[bool], ...],
     ) -> list[WeeklyDiscordReportEventResponse]:
         events = self._db.scalars(
             select(Event)
