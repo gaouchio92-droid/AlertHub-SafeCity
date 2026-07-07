@@ -75,6 +75,8 @@ def test_connector_configuration_guide_endpoint_lists_env_vars_without_values() 
     payload = response.json()
     discord = next(item for item in payload if item["source"] == "discord")
     assert "DISCORD_TOKEN" in discord["env_vars"]
+    assert "DISCORD_TOKEN=<discord-bot-token>" in discord["env_template"]
+    assert "docker compose up -d --force-recreate backend nginx" in discord["apply_commands"]
     assert discord["restart_required"] is True
     assert "Bot " not in response.text
 

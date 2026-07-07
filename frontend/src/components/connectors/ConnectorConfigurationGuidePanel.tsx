@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { FileCog } from 'lucide-react';
+import { FileCog, TerminalSquare } from 'lucide-react';
 
 import {
   ConnectorConfigurationGuideItem,
@@ -50,12 +50,12 @@ export function ConnectorConfigurationGuidePanel() {
         </p>
       </div>
 
-      <div className="mt-5 grid gap-3 lg:grid-cols-3">
+      <div className="mt-5 grid gap-4 xl:grid-cols-3">
         {isLoading
           ? Array.from({ length: 3 }).map((_, index) => (
               <div
                 key={index}
-                className="h-40 animate-pulse rounded-md border border-white/10 bg-slate-900"
+                className="h-80 animate-pulse rounded-md border border-white/10 bg-slate-900"
               />
             ))
           : items.map((item) => (
@@ -76,6 +76,27 @@ export function ConnectorConfigurationGuidePanel() {
                       {envVar}
                     </span>
                   ))}
+                </div>
+
+                <div className="mt-5 rounded-md border border-white/10 bg-slate-950 p-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    .env block
+                  </p>
+                  <pre className="mt-3 overflow-x-auto whitespace-pre-wrap break-words rounded-md bg-black/30 p-3 font-mono text-xs leading-5 text-slate-200">
+                    {item.env_template.join('\n')}
+                  </pre>
+                </div>
+
+                <div className="mt-3 rounded-md border border-white/10 bg-slate-950 p-3">
+                  <div className="flex items-center gap-2">
+                    <TerminalSquare className="h-4 w-4 text-cyan-300" aria-hidden="true" />
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Apply command
+                    </p>
+                  </div>
+                  <pre className="mt-3 overflow-x-auto whitespace-pre-wrap break-words rounded-md bg-black/30 p-3 font-mono text-xs leading-5 text-slate-200">
+                    {item.apply_commands.join('\n')}
+                  </pre>
                 </div>
                 <p className="mt-4 text-sm leading-6 text-slate-400">{item.note}</p>
               </article>

@@ -109,6 +109,18 @@ async def connector_configuration_guide() -> list[ConnectorConfigurationGuideIte
                 "DISCORD_CHANNEL_ID",
                 "DISCORD_GUILD_ID",
             ],
+            env_template=[
+                "EVENT_SOURCE=discord",
+                "ENABLE_DISCORD=true",
+                "ENABLE_ZABBIX_API=false",
+                "ENABLE_ZABBIX_DB=false",
+                "DISCORD_TOKEN=<discord-bot-token>",
+                "DISCORD_GUILD_ID=<discord-server-id>",
+                "DISCORD_CHANNEL_ID=<discord-channel-id>",
+            ],
+            apply_commands=[
+                "docker compose up -d --force-recreate backend nginx",
+            ],
             restart_required=True,
             note="Discord is the default connector. Values are read from .env and Docker Compose.",
         ),
@@ -121,6 +133,18 @@ async def connector_configuration_guide() -> list[ConnectorConfigurationGuideIte
                 "ZABBIX_API_URL",
                 "ZABBIX_USERNAME",
                 "ZABBIX_PASSWORD",
+            ],
+            env_template=[
+                "EVENT_SOURCE=zabbix_api",
+                "ENABLE_DISCORD=false",
+                "ENABLE_ZABBIX_API=true",
+                "ENABLE_ZABBIX_DB=false",
+                "ZABBIX_API_URL=https://zabbix.example.com/api_jsonrpc.php",
+                "ZABBIX_USERNAME=<zabbix-user>",
+                "ZABBIX_PASSWORD=<zabbix-password>",
+            ],
+            apply_commands=[
+                "docker compose up -d --force-recreate backend nginx",
             ],
             restart_required=True,
             note=(
@@ -139,6 +163,20 @@ async def connector_configuration_guide() -> list[ConnectorConfigurationGuideIte
                 "ZABBIX_DB_NAME",
                 "ZABBIX_DB_USER",
                 "ZABBIX_DB_PASSWORD",
+            ],
+            env_template=[
+                "EVENT_SOURCE=zabbix_database",
+                "ENABLE_DISCORD=false",
+                "ENABLE_ZABBIX_API=false",
+                "ENABLE_ZABBIX_DB=true",
+                "ZABBIX_DB_HOST=<zabbix-db-host>",
+                "ZABBIX_DB_PORT=5432",
+                "ZABBIX_DB_NAME=<zabbix-db-name>",
+                "ZABBIX_DB_USER=<read-only-user>",
+                "ZABBIX_DB_PASSWORD=<read-only-password>",
+            ],
+            apply_commands=[
+                "docker compose up -d --force-recreate backend nginx",
             ],
             restart_required=True,
             note=(

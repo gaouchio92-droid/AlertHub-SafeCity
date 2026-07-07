@@ -52,6 +52,8 @@ export type ConnectorConfigurationGuideItem = {
   source: string;
   name: string;
   env_vars: string[];
+  env_template: string[];
+  apply_commands: string[];
   restart_required: boolean;
   note: string;
 };

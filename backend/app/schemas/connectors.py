@@ -87,5 +87,7 @@ class ConnectorConfigurationGuideItemResponse(BaseModel):
     source: str
     name: str
     env_vars: list[str]
+    env_template: list[str]
+    apply_commands: list[str]
     restart_required: bool
     note: str
