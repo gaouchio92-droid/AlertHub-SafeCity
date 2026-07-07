@@ -1,9 +1,10 @@
-import { BarChart3, FileText, Home, PlugZap, Settings, ShieldAlert, X } from 'lucide-react';
+import { BarChart3, FileText, Home, ListChecks, PlugZap, Settings, ShieldAlert, X } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
 
 const navigation = [
   { name: 'Home', href: '/home', icon: Home },
   { name: 'Connectors', href: '/event-sources', icon: PlugZap },
+  { name: 'Events', href: '/events', icon: ListChecks },
   { name: 'Reports', href: '/reports', icon: FileText },
   { name: 'Settings', href: '/settings', icon: Settings },
 ];

@@ -108,6 +108,38 @@ export type EventSyncResult = {
   updated: number;
 };
 
+export type AlertEvent = {
+  id: string;
+  source: string;
+  problem_id: string | null;
+  host: string | null;
+  severity: string | null;
+  status: string | null;
+  problem_name: string | null;
+  started_at: string | null;
+  resolved_at: string | null;
+  duration: number | null;
+  raw_payload: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+};
+
+export type EventList = {
+  items: AlertEvent[];
+  total: number;
+  limit: number;
+  offset: number;
+};
+
+export type EventFilters = {
+  source?: string;
+  status?: string;
+  severity?: string;
+  limit?: number;
+  offset?: number;
+  include_unparsed?: boolean;
+};
+
 export const apiClient = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL ?? '/api/v1',
   timeout: 10_000,
@@ -160,5 +192,10 @@ export async function getWeeklyDiscordReport(): Promise<WeeklyDiscordReport> {
 
 export async function syncEvents(): Promise<EventSyncResult> {
   const response = await apiClient.post<EventSyncResult>('/events/sync');
+  return response.data;
+}
+
+export async function getEvents(filters: EventFilters = {}): Promise<EventList> {
+  const response = await apiClient.get<EventList>('/events', { params: filters });
   return response.data;
 }
