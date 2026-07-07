@@ -1,13 +1,14 @@
 """Report query services."""
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.orm import InstrumentedAttribute, Session
 from sqlalchemy.sql.elements import ColumnElement
 
 from app.models.event import Event
 from app.schemas.reports import (
+    WeeklyDiscordReportDailyTrendResponse,
     WeeklyDiscordReportDataQualityResponse,
     WeeklyDiscordReportEventResponse,
     WeeklyDiscordReportMetricResponse,
@@ -58,6 +59,7 @@ class ReportService:
             ),
             by_severity=self._metrics("severity", base_filters),
             by_host=self._metrics("host", base_filters),
+            daily_trend=self._daily_trend(period_start.date(), period_end.date(), base_filters),
             recent_events=self._recent_events(base_filters),
         )
 
@@ -77,6 +79,47 @@ class ReportService:
         return [
             WeeklyDiscordReportMetricResponse(label=self._display_label(label), value=count)
             for label, count in rows
+        ]
+
+    def _daily_trend(
+        self,
+        period_start: date,
+        period_end: date,
+        base_filters: tuple[ColumnElement[bool], ...],
+    ) -> list[WeeklyDiscordReportDailyTrendResponse]:
+        day_column = func.date(Event.started_at)
+        rows = self._db.execute(
+            select(
+                day_column.label("event_day"),
+                func.count().label("total"),
+                func.sum(case((Event.resolved_at.is_(None), 1), else_=0)).label("problem"),
+                func.sum(case((Event.resolved_at.is_not(None), 1), else_=0)).label("resolved"),
+            )
+            .where(*base_filters)
+            .group_by(day_column)
+            .order_by(day_column)
+        ).all()
+        row_by_day = {
+            self._coerce_date(row.event_day): {
+                "total": int(row.total or 0),
+                "problem": int(row.problem or 0),
+                "resolved": int(row.resolved or 0),
+            }
+            for row in rows
+        }
+
+        days = (period_end - period_start).days
+        return [
+            WeeklyDiscordReportDailyTrendResponse(
+                date=current_day,
+                total=row_by_day.get(current_day, {}).get("total", 0),
+                problem=row_by_day.get(current_day, {}).get("problem", 0),
+                resolved=row_by_day.get(current_day, {}).get("resolved", 0),
+            )
+            for current_day in (
+                period_start + timedelta(days=day_offset)
+                for day_offset in range(days + 1)
+            )
         ]
 
     def _recent_events(
@@ -147,6 +190,12 @@ class ReportService:
         if value is None or str(value).strip() == "":
             return "Not detected yet"
         return str(value)
+
+    @staticmethod
+    def _coerce_date(value: object) -> date:
+        if isinstance(value, date):
+            return value
+        return date.fromisoformat(str(value))
 
     @staticmethod
     def _event_title(event: Event) -> str:

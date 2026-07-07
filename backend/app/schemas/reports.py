@@ -1,6 +1,6 @@
 """Report API schemas."""
 
-from datetime import datetime
+from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict
 
@@ -54,6 +54,17 @@ class WeeklyDiscordReportDataQualityResponse(BaseModel):
     warnings: list[str]
 
 
+class WeeklyDiscordReportDailyTrendResponse(BaseModel):
+    """Daily event trend bucket for the weekly report."""
+
+    model_config = ConfigDict(frozen=True)
+
+    date: date
+    total: int
+    problem: int
+    resolved: int
+
+
 class WeeklyDiscordReportResponse(BaseModel):
     """Weekly Discord report generated from normalized events."""
 
@@ -68,4 +79,5 @@ class WeeklyDiscordReportResponse(BaseModel):
     data_quality: WeeklyDiscordReportDataQualityResponse
     by_severity: list[WeeklyDiscordReportMetricResponse]
     by_host: list[WeeklyDiscordReportMetricResponse]
+    daily_trend: list[WeeklyDiscordReportDailyTrendResponse]
     recent_events: list[WeeklyDiscordReportEventResponse]

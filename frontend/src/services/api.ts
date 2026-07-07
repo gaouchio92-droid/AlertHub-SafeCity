@@ -89,6 +89,13 @@ export type WeeklyDiscordReportDataQuality = {
   warnings: string[];
 };
 
+export type WeeklyDiscordReportDailyTrend = {
+  date: string;
+  total: number;
+  problem: number;
+  resolved: number;
+};
+
 export type WeeklyDiscordReport = {
   source: string;
   period_start: string;
@@ -99,6 +106,7 @@ export type WeeklyDiscordReport = {
   data_quality: WeeklyDiscordReportDataQuality;
   by_severity: WeeklyDiscordReportMetric[];
   by_host: WeeklyDiscordReportMetric[];
+  daily_trend: WeeklyDiscordReportDailyTrend[];
   recent_events: WeeklyDiscordReportEvent[];
 };
 

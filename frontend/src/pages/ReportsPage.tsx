@@ -11,6 +11,7 @@ import {
 import {
   EventSyncResult,
   WeeklyDiscordReport,
+  WeeklyDiscordReportDailyTrend,
   WeeklyDiscordReportMetric,
   WeeklyDiscordReportStatus,
   getWeeklyDiscordReport,
@@ -140,6 +141,8 @@ export function ReportsPage() {
         </div>
       </section>
 
+      <DailyTrendPanel items={report?.daily_trend ?? []} />
+
       <section className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
         <DataQualityPanel report={report} />
         <div className="grid gap-4 md:grid-cols-2">
@@ -251,6 +254,61 @@ function DataQualityPanel({ report }: { report: WeeklyDiscordReport | null }) {
         ))}
       </div>
     </div>
+  );
+}
+
+function DailyTrendPanel({ items }: { items: WeeklyDiscordReportDailyTrend[] }) {
+  const maxValue = Math.max(...items.map((item) => item.total), 1);
+
+  return (
+    <section className="rounded-md border border-white/10 bg-white/[0.04] p-6">
+      <div className="flex items-center gap-2">
+        <CalendarClock className="h-5 w-5 text-cyan-300" aria-hidden="true" />
+        <h3 className="text-lg font-semibold text-white">Daily alert trend</h3>
+      </div>
+      <div className="mt-5 grid gap-3 md:grid-cols-4 xl:grid-cols-8">
+        {items.map((item) => {
+          const barHeight = Math.max((item.total / maxValue) * 100, item.total > 0 ? 12 : 4);
+          return (
+            <div key={item.date} className="rounded-md border border-white/10 bg-slate-950/60 p-3">
+              <div className="flex h-28 items-end gap-1">
+                <div
+                  className="w-1/2 rounded-t bg-rose-300/80"
+                  style={{ height: `${Math.max((item.problem / maxValue) * 100, item.problem > 0 ? 10 : 3)}%` }}
+                />
+                <div
+                  className="w-1/2 rounded-t bg-emerald-300/80"
+                  style={{ height: `${Math.max((item.resolved / maxValue) * 100, item.resolved > 0 ? 10 : 3)}%` }}
+                />
+              </div>
+              <p className="mt-3 text-xs font-medium text-white">
+                {new Date(`${item.date}T00:00:00`).toLocaleDateString(undefined, {
+                  month: 'short',
+                  day: 'numeric',
+                })}
+              </p>
+              <p className="mt-1 text-xs text-slate-400">{item.total} total</p>
+              <div className="mt-2 h-1 rounded-full bg-slate-800">
+                <div
+                  className="h-1 rounded-full bg-cyan-300"
+                  style={{ width: `${barHeight}%` }}
+                />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <div className="mt-4 flex flex-wrap gap-4 text-xs text-slate-400">
+        <span className="inline-flex items-center gap-2">
+          <span className="h-2 w-2 rounded-sm bg-rose-300" />
+          Open/problem
+        </span>
+        <span className="inline-flex items-center gap-2">
+          <span className="h-2 w-2 rounded-sm bg-emerald-300" />
+          Resolved
+        </span>
+      </div>
+    </section>
   );
 }
 
