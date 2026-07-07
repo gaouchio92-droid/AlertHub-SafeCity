@@ -67,3 +67,24 @@ def export_weekly_discord_report(
             ),
         },
     )
+
+
+@router.get(
+    "/weekly-discord/export.pdf",
+    response_class=Response,
+    summary="Export weekly Discord management report as PDF",
+)
+def export_weekly_discord_report_pdf(
+    db: Annotated[Session, Depends(get_db)],
+) -> Response:
+    """Return a polished PDF report suitable for management sharing."""
+    content = ReportService(db).build_weekly_discord_management_pdf()
+    return Response(
+        content=content,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": (
+                'attachment; filename="alerthub-weekly-discord-report.pdf"'
+            ),
+        },
+    )

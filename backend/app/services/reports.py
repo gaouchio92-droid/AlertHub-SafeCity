@@ -14,6 +14,7 @@ from app.schemas.reports import (
     WeeklyDiscordReportMetricResponse,
     WeeklyDiscordReportResponse,
 )
+from app.services.report_pdf import build_weekly_discord_pdf
 
 
 class ReportService:
@@ -113,6 +114,15 @@ class ReportService:
             "",
         ]
         return "\n".join(lines)
+
+    def build_weekly_discord_management_pdf(self) -> bytes:
+        """Return a polished PDF report suitable for operational management."""
+        report = self.build_weekly_discord_report()
+        return build_weekly_discord_pdf(
+            report,
+            findings=self._management_findings(report),
+            recommendations=self._stabilization_recommendations(report),
+        )
 
     def _metrics(
         self,

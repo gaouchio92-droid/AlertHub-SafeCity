@@ -92,12 +92,19 @@ export function ReportsPage() {
         </div>
         <div className="flex flex-wrap gap-3">
           <a
+            href="/api/v1/reports/weekly-discord/export.pdf"
+            download="alerthub-weekly-discord-report.pdf"
+            className="inline-flex items-center justify-center gap-2 rounded-md bg-cyan-400 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300"
+          >
+            <FileDown className="h-4 w-4" aria-hidden="true" />
+            Export PDF
+          </a>
+          <a
             href="/api/v1/reports/weekly-discord/export"
             download="alerthub-weekly-discord-report.md"
             className="inline-flex items-center justify-center gap-2 rounded-md border border-white/10 px-4 py-2 text-sm font-semibold text-slate-100 transition hover:bg-white/5"
           >
-            <FileDown className="h-4 w-4" aria-hidden="true" />
-            Export report
+            Markdown
           </a>
           <button
             type="button"
