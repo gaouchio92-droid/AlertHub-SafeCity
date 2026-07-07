@@ -1,13 +1,15 @@
 import { BarChart3, FileText, Home, ListChecks, PlugZap, Settings, ShieldAlert, X } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
 
+import { useI18n } from '../../i18n/I18nProvider';
+
 const navigation = [
-  { name: 'Home', href: '/home', icon: Home },
-  { name: 'Connectors', href: '/event-sources', icon: PlugZap },
-  { name: 'Events', href: '/events', icon: ListChecks },
-  { name: 'Reports', href: '/reports', icon: FileText },
-  { name: 'Settings', href: '/settings', icon: Settings },
-];
+  { key: 'home', href: '/home', icon: Home },
+  { key: 'connectors', href: '/event-sources', icon: PlugZap },
+  { key: 'events', href: '/events', icon: ListChecks },
+  { key: 'reports', href: '/reports', icon: FileText },
+  { key: 'settings', href: '/settings', icon: Settings },
+] as const;
 
 type SidebarProps = {
   isMobileOpen?: boolean;
@@ -15,11 +17,13 @@ type SidebarProps = {
 };
 
 function NavigationLinks({ onNavigate }: { onNavigate?: () => void }) {
+  const { t } = useI18n();
+
   return (
     <nav className="mt-10 space-y-1" aria-label="Primary navigation">
       {navigation.map((item) => (
         <NavLink
-          key={item.name}
+          key={item.key}
           to={item.href}
           onClick={onNavigate}
           className={({ isActive }) =>
@@ -32,7 +36,7 @@ function NavigationLinks({ onNavigate }: { onNavigate?: () => void }) {
           }
         >
           <item.icon className="h-5 w-5" aria-hidden="true" />
-          {item.name}
+          {t.nav[item.key]}
         </NavLink>
       ))}
     </nav>
@@ -40,6 +44,8 @@ function NavigationLinks({ onNavigate }: { onNavigate?: () => void }) {
 }
 
 function SidebarContent({ onClose }: { onClose?: () => void }) {
+  const { t } = useI18n();
+
   return (
     <>
       <div className="flex items-center gap-3">
@@ -55,7 +61,7 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
             type="button"
             onClick={onClose}
             className="ml-auto flex h-10 w-10 items-center justify-center rounded-md text-slate-300 transition hover:bg-white/5 hover:text-white"
-            aria-label="Close menu"
+            aria-label={t.nav.closeMenu}
           >
             <X className="h-5 w-5" aria-hidden="true" />
           </button>
@@ -67,7 +73,7 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
       <div className="absolute bottom-6 left-5 right-5 rounded-md border border-white/10 bg-white/[0.03] p-4">
         <div className="flex items-center gap-3 text-slate-300">
           <BarChart3 className="h-5 w-5 text-emerald-300" aria-hidden="true" />
-          <span className="text-sm font-medium">Monitoring analytics foundation</span>
+          <span className="text-sm font-medium">{t.nav.analyticsFoundation}</span>
         </div>
       </div>
     </>
@@ -75,6 +81,8 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
 }
 
 export function Sidebar({ isMobileOpen = false, onClose }: SidebarProps) {
+  const { t } = useI18n();
+
   return (
     <>
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-72 border-r border-white/10 bg-slate-950/95 px-5 py-6 lg:block">
@@ -86,7 +94,7 @@ export function Sidebar({ isMobileOpen = false, onClose }: SidebarProps) {
           <button
             type="button"
             className="absolute inset-0 bg-slate-950/70 backdrop-blur-sm"
-            aria-label="Close menu overlay"
+            aria-label={t.nav.closeOverlay}
             onClick={onClose}
           />
           <aside
