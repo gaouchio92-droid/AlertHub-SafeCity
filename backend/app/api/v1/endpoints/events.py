@@ -21,6 +21,7 @@ def list_events(
     source: Annotated[str | None, Query(max_length=64)] = None,
     status: Annotated[str | None, Query(max_length=64)] = None,
     severity: Annotated[str | None, Query(max_length=64)] = None,
+    q: Annotated[str | None, Query(min_length=1, max_length=120)] = None,
     include_unparsed: bool = False,
 ) -> EventListResponse:
     """Return normalized events stored by connector ingestion."""
@@ -30,6 +31,7 @@ def list_events(
         source=source,
         status=status,
         severity=severity,
+        query=q,
         include_unparsed=include_unparsed,
     )
     return EventListResponse(

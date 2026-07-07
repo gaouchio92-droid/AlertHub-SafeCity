@@ -143,6 +143,7 @@ export type EventFilters = {
   source?: string;
   status?: string;
   severity?: string;
+  q?: string;
   limit?: number;
   offset?: number;
   include_unparsed?: boolean;

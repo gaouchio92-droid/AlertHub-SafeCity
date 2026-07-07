@@ -1,6 +1,6 @@
 """Event query services."""
 
-from sqlalchemy import Select, delete, func, select
+from sqlalchemy import Select, delete, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.connectors.base import ConnectorEvent
@@ -30,6 +30,7 @@ class EventService:
         source: str | None = None,
         status: str | None = None,
         severity: str | None = None,
+        query: str | None = None,
         include_unparsed: bool = False,
     ) -> tuple[list[Event], int]:
         """Return paginated events ordered by newest first."""
@@ -37,6 +38,7 @@ class EventService:
             source=source,
             status=status,
             severity=severity,
+            query=query,
             include_unparsed=include_unparsed,
         )
         total = self._db.scalar(
@@ -172,6 +174,7 @@ class EventService:
         source: str | None,
         status: str | None,
         severity: str | None,
+        query: str | None,
         include_unparsed: bool,
     ) -> Select[tuple[Event]]:
         statement = select(Event)
@@ -181,6 +184,17 @@ class EventService:
             statement = statement.where(Event.status == status)
         if severity:
             statement = statement.where(Event.severity == severity)
+        if query:
+            search = f"%{query.strip()}%"
+            statement = statement.where(
+                or_(
+                    Event.problem_id.ilike(search),
+                    Event.host.ilike(search),
+                    Event.severity.ilike(search),
+                    Event.status.ilike(search),
+                    Event.problem_name.ilike(search),
+                )
+            )
         if not include_unparsed:
             statement = statement.where(Event.problem_name.is_not(None))
         return statement

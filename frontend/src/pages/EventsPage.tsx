@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, ArrowRight, ExternalLink, Filter, RefreshCw } from 'lucide-react';
+import { ArrowLeft, ArrowRight, ExternalLink, Filter, RefreshCw, Search } from 'lucide-react';
 
 import { AlertEvent, EventList, EventSyncResult, getEvents, syncEvents } from '../services/api';
 
 const PAGE_SIZE = 20;
 
 type EventFilterState = {
+  query: string;
   status: string;
   severity: string;
   includeUnparsed: boolean;
@@ -69,6 +70,7 @@ function statusClassName(status: string | null) {
 export function EventsPage() {
   const [events, setEvents] = useState<EventList | null>(null);
   const [filters, setFilters] = useState<EventFilterState>({
+    query: '',
     status: '',
     severity: '',
     includeUnparsed: false,
@@ -90,6 +92,7 @@ export function EventsPage() {
         source: 'discord',
         status: filters.status || undefined,
         severity: filters.severity || undefined,
+        q: filters.query.trim() || undefined,
         include_unparsed: filters.includeUnparsed,
         limit: PAGE_SIZE,
         offset: nextOffset,
@@ -150,7 +153,22 @@ export function EventsPage() {
             <h3 className="text-base font-semibold text-white">Filters</h3>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-3 xl:min-w-[760px]">
+          <div className="grid gap-3 sm:grid-cols-2 xl:min-w-[920px] xl:grid-cols-[1.2fr_0.8fr_0.8fr_1fr]">
+            <label className="space-y-2 text-sm text-slate-300">
+              <span>Search</span>
+              <div className="flex items-center gap-2 rounded-md border border-white/10 bg-slate-950 px-3 py-2 transition focus-within:border-cyan-300">
+                <Search className="h-4 w-4 text-slate-500" aria-hidden="true" />
+                <input
+                  value={filters.query}
+                  onChange={(event) =>
+                    setFilters((current) => ({ ...current, query: event.target.value }))
+                  }
+                  className="min-w-0 flex-1 bg-transparent text-white outline-none placeholder:text-slate-600"
+                  placeholder="Host, ID, alert name"
+                />
+              </div>
+            </label>
+
             <label className="space-y-2 text-sm text-slate-300">
               <span>Status</span>
               <select

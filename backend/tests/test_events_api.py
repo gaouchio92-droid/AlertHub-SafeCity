@@ -20,6 +20,7 @@ class StubEventService:
     last_source: str | None = None
     last_status: str | None = None
     last_severity: str | None = None
+    last_query: str | None = None
     last_include_unparsed: bool | None = None
 
     def __init__(self, db: object) -> None:
@@ -33,6 +34,7 @@ class StubEventService:
         source: str | None = None,
         status: str | None = None,
         severity: str | None = None,
+        query: str | None = None,
         include_unparsed: bool = False,
     ) -> tuple[list[EventResponse], int]:
         """Return deterministic API test data."""
@@ -41,6 +43,7 @@ class StubEventService:
         StubEventService.last_source = source
         StubEventService.last_status = status
         StubEventService.last_severity = severity
+        StubEventService.last_query = query
         StubEventService.last_include_unparsed = include_unparsed
         timestamp = datetime(2026, 7, 6, 12, 0, tzinfo=UTC)
         return [
@@ -112,6 +115,7 @@ def test_list_events_returns_paginated_events(monkeypatch: object) -> None:
             "source": "discord",
             "status": "problem",
             "severity": "high",
+            "q": "router",
         },
     )
 
@@ -127,6 +131,7 @@ def test_list_events_returns_paginated_events(monkeypatch: object) -> None:
     assert StubEventService.last_source == "discord"
     assert StubEventService.last_status == "problem"
     assert StubEventService.last_severity == "high"
+    assert StubEventService.last_query == "router"
     assert StubEventService.last_include_unparsed is False
 
 
