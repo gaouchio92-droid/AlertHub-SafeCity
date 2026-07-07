@@ -27,41 +27,51 @@ class ReportService:
         """Return a rolling seven-day Discord event report."""
         period_end = datetime.now(UTC)
         period_start = period_end - timedelta(days=7)
-        base_filters: tuple[ColumnElement[bool], ...] = (
+        all_discord_filters: tuple[ColumnElement[bool], ...] = (
             Event.source == "discord",
             Event.started_at >= period_start,
             Event.started_at <= period_end,
+        )
+        readable_filters: tuple[ColumnElement[bool], ...] = (
+            *all_discord_filters,
             Event.problem_name.is_not(None),
         )
 
         total_events = self._db.scalar(
-            select(func.count()).select_from(Event).where(*base_filters)
+            select(func.count()).select_from(Event).where(*all_discord_filters)
+        ) or 0
+        readable_events = self._db.scalar(
+            select(func.count()).select_from(Event).where(*readable_filters)
         ) or 0
         resolved_events = self._db.scalar(
             select(func.count())
             .select_from(Event)
-            .where(*base_filters, Event.resolved_at.is_not(None))
+            .where(*readable_filters, Event.resolved_at.is_not(None))
         ) or 0
-        unnamed_events = self._count_missing(Event.problem_name, base_filters)
-        unknown_severity_events = self._count_missing(Event.severity, base_filters)
-        unknown_host_events = self._count_missing(Event.host, base_filters)
+        unnamed_events = self._count_missing(Event.problem_name, all_discord_filters)
+        unknown_severity_events = self._count_missing(Event.severity, all_discord_filters)
+        unknown_host_events = self._count_missing(Event.host, all_discord_filters)
 
         return WeeklyDiscordReportResponse(
             source="discord",
             period_start=period_start,
             period_end=period_end,
             total_events=total_events,
-            open_events=max(total_events - resolved_events, 0),
+            open_events=max(readable_events - resolved_events, 0),
             resolved_events=resolved_events,
             data_quality=self._data_quality(
                 unnamed_events=unnamed_events,
                 unknown_severity_events=unknown_severity_events,
                 unknown_host_events=unknown_host_events,
             ),
-            by_severity=self._metrics("severity", base_filters),
-            by_host=self._metrics("host", base_filters),
-            daily_trend=self._daily_trend(period_start.date(), period_end.date(), base_filters),
-            recent_events=self._recent_events(base_filters),
+            by_severity=self._metrics("severity", readable_filters),
+            by_host=self._metrics("host", readable_filters),
+            daily_trend=self._daily_trend(
+                period_start.date(),
+                period_end.date(),
+                all_discord_filters,
+            ),
+            recent_events=self._recent_events(readable_filters),
         )
 
     def build_weekly_discord_management_report(self) -> str:
@@ -153,8 +163,8 @@ class ReportService:
             select(
                 day_column.label("event_day"),
                 func.count().label("total"),
-                func.sum(case((Event.resolved_at.is_(None), 1), else_=0)).label("problem"),
-                func.sum(case((Event.resolved_at.is_not(None), 1), else_=0)).label("resolved"),
+                func.sum(case((Event.status == "problem", 1), else_=0)).label("problem"),
+                func.sum(case((Event.status == "resolved", 1), else_=0)).label("resolved"),
             )
             .where(*base_filters)
             .group_by(day_column)
