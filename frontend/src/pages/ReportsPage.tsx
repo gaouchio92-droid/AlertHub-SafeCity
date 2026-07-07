@@ -15,7 +15,6 @@ import {
   WeeklyDiscordReportDailyTrend,
   WeeklyDiscordReportMetric,
   WeeklyDiscordReportStatus,
-  exportWeeklyDiscordReport,
   getWeeklyDiscordReport,
   getWeeklyDiscordReportStatus,
   syncEvents,
@@ -40,7 +39,6 @@ export function ReportsPage() {
   const [report, setReport] = useState<WeeklyDiscordReport | null>(null);
   const [syncResult, setSyncResult] = useState<EventSyncResult | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
-  const [isExporting, setIsExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const readableEvents = useMemo(() => {
@@ -81,26 +79,6 @@ export function ReportsPage() {
     }
   }
 
-  async function handleExport() {
-    setIsExporting(true);
-    try {
-      const blob = await exportWeeklyDiscordReport();
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = 'alerthub-weekly-discord-report.md';
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
-      setError(null);
-    } catch {
-      setError('Report export failed');
-    } finally {
-      setIsExporting(false);
-    }
-  }
-
   return (
     <section className="space-y-6">
       <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
@@ -113,15 +91,14 @@ export function ReportsPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-3">
-          <button
-            type="button"
-            onClick={handleExport}
-            disabled={isExporting}
-            className="inline-flex items-center justify-center gap-2 rounded-md border border-white/10 px-4 py-2 text-sm font-semibold text-slate-100 transition hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-60"
+          <a
+            href="/api/v1/reports/weekly-discord/export"
+            download="alerthub-weekly-discord-report.md"
+            className="inline-flex items-center justify-center gap-2 rounded-md border border-white/10 px-4 py-2 text-sm font-semibold text-slate-100 transition hover:bg-white/5"
           >
             <FileDown className="h-4 w-4" aria-hidden="true" />
             Export report
-          </button>
+          </a>
           <button
             type="button"
             onClick={handleSync}
