@@ -1,14 +1,25 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
+  Activity,
+  AlertTriangle,
   CheckCircle2,
   ChevronRight,
   Database,
   FileCode2,
+  FileText,
   Network,
   Server,
   ShieldCheck,
   TerminalSquare,
 } from 'lucide-react';
+import { Link } from 'react-router-dom';
+
+import {
+  ConnectorDiagnostic,
+  WeeklyDiscordReport,
+  getConnectorDiagnostics,
+  getWeeklyDiscordReport,
+} from '../services/api';
 
 const cards = [
   {
@@ -84,19 +95,107 @@ const readinessItems = [
 export function HomePage() {
   const [selectedReadinessKey, setSelectedReadinessKey] =
     useState<(typeof readinessItems)[number]['key']>('docker');
+  const [report, setReport] = useState<WeeklyDiscordReport | null>(null);
+  const [diagnostics, setDiagnostics] = useState<ConnectorDiagnostic[]>([]);
+  const [isLoadingOperations, setIsLoadingOperations] = useState(true);
+  const [operationsError, setOperationsError] = useState<string | null>(null);
   const selectedReadiness =
     readinessItems.find((item) => item.key === selectedReadinessKey) ?? readinessItems[0];
+  const discordDiagnostic = useMemo(
+    () => diagnostics.find((diagnostic) => diagnostic.source === 'discord') ?? null,
+    [diagnostics],
+  );
+
+  useEffect(() => {
+    async function loadOperationalSummary() {
+      try {
+        const [reportResponse, diagnosticsResponse] = await Promise.all([
+          getWeeklyDiscordReport(),
+          getConnectorDiagnostics(),
+        ]);
+        setReport(reportResponse);
+        setDiagnostics(diagnosticsResponse);
+        setOperationsError(null);
+      } catch {
+        setOperationsError('Operational summary unavailable');
+      } finally {
+        setIsLoadingOperations(false);
+      }
+    }
+
+    void loadOperationalSummary();
+  }, []);
 
   return (
     <section className="space-y-6">
       <div>
-        <p className="text-sm font-semibold uppercase tracking-wide text-cyan-300">Sprint 1</p>
-        <h2 className="mt-2 text-3xl font-semibold text-white">Infrastructure dashboard</h2>
+        <p className="text-sm font-semibold uppercase tracking-wide text-cyan-300">Operations</p>
+        <h2 className="mt-2 text-3xl font-semibold text-white">Safe City dashboard</h2>
         <p className="mt-3 max-w-3xl text-base leading-7 text-slate-300">
-          AlertHub Safe City is ready for independent alert ingestion and analytics work in later
-          sprints. This screen intentionally contains platform status surfaces only.
+          Live monitoring summary from the configured Discord alert channel, with infrastructure
+          readiness kept visible for operations.
         </p>
       </div>
+
+      <section className="rounded-md border border-white/10 bg-white/[0.04] p-6">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+          <div>
+            <div className="flex items-center gap-2">
+              <Activity className="h-5 w-5 text-emerald-300" aria-hidden="true" />
+              <h3 className="text-lg font-semibold text-white">Operational snapshot</h3>
+            </div>
+            <p className="mt-2 text-sm text-slate-400">
+              {isLoadingOperations ? 'Loading live data' : 'Current seven-day Discord ingestion view'}
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Link
+              to="/events"
+              className="inline-flex items-center gap-2 rounded-md bg-cyan-400 px-3 py-2 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300"
+            >
+              <Database className="h-4 w-4" aria-hidden="true" />
+              Open Events
+            </Link>
+            <Link
+              to="/reports"
+              className="inline-flex items-center gap-2 rounded-md border border-white/10 px-3 py-2 text-sm font-medium text-slate-200 transition hover:bg-white/5"
+            >
+              <FileText className="h-4 w-4" aria-hidden="true" />
+              Weekly Report
+            </Link>
+          </div>
+        </div>
+
+        <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <OperationalMetric
+            label="Weekly alerts"
+            value={report?.total_events ?? 0}
+            tone="cyan"
+          />
+          <OperationalMetric
+            label="Open problems"
+            value={report?.open_events ?? 0}
+            tone={report?.open_events ? 'rose' : 'emerald'}
+          />
+          <OperationalMetric
+            label="Resolved"
+            value={report?.resolved_events ?? 0}
+            tone="emerald"
+          />
+          <OperationalMetric
+            label="Discord connector"
+            value={discordDiagnostic?.ready ? 'Ready' : 'Needs config'}
+            tone={discordDiagnostic?.ready ? 'emerald' : 'amber'}
+          />
+        </div>
+
+        {operationsError ? (
+          <p className="mt-4 flex items-center gap-2 text-sm text-amber-200">
+            <AlertTriangle className="h-4 w-4" aria-hidden="true" />
+            {operationsError}
+          </p>
+        ) : null}
+      </section>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {cards.map((card) => (
@@ -181,5 +280,29 @@ export function HomePage() {
         </div>
       </div>
     </section>
+  );
+}
+
+function OperationalMetric({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: number | string;
+  tone: 'amber' | 'cyan' | 'emerald' | 'rose';
+}) {
+  const toneClasses = {
+    amber: 'border-amber-300/20 bg-amber-300/[0.06] text-amber-100',
+    cyan: 'border-cyan-300/20 bg-cyan-300/[0.06] text-cyan-100',
+    emerald: 'border-emerald-300/20 bg-emerald-300/[0.06] text-emerald-100',
+    rose: 'border-rose-300/20 bg-rose-300/[0.06] text-rose-100',
+  };
+
+  return (
+    <div className={['rounded-md border p-4', toneClasses[tone]].join(' ')}>
+      <p className="text-sm text-slate-300">{label}</p>
+      <p className="mt-2 text-3xl font-semibold text-white">{value}</p>
+    </div>
   );
 }
