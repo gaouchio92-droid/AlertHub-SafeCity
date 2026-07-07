@@ -16,8 +16,10 @@ import { Link } from 'react-router-dom';
 
 import {
   ConnectorDiagnostic,
+  EventSummary,
   WeeklyDiscordReport,
   getConnectorDiagnostics,
+  getEventSummary,
   getWeeklyDiscordReport,
 } from '../services/api';
 
@@ -96,6 +98,7 @@ export function HomePage() {
   const [selectedReadinessKey, setSelectedReadinessKey] =
     useState<(typeof readinessItems)[number]['key']>('docker');
   const [report, setReport] = useState<WeeklyDiscordReport | null>(null);
+  const [eventSummary, setEventSummary] = useState<EventSummary | null>(null);
   const [diagnostics, setDiagnostics] = useState<ConnectorDiagnostic[]>([]);
   const [isLoadingOperations, setIsLoadingOperations] = useState(true);
   const [operationsError, setOperationsError] = useState<string | null>(null);
@@ -109,12 +112,14 @@ export function HomePage() {
   useEffect(() => {
     async function loadOperationalSummary() {
       try {
-        const [reportResponse, diagnosticsResponse] = await Promise.all([
+        const [reportResponse, diagnosticsResponse, summaryResponse] = await Promise.all([
           getWeeklyDiscordReport(),
           getConnectorDiagnostics(),
+          getEventSummary(),
         ]);
         setReport(reportResponse);
         setDiagnostics(diagnosticsResponse);
+        setEventSummary(summaryResponse);
         setOperationsError(null);
       } catch {
         setOperationsError('Operational summary unavailable');
@@ -168,25 +173,37 @@ export function HomePage() {
 
         <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <OperationalMetric
-            label="Weekly alerts"
-            value={report?.total_events ?? 0}
+            label="Stored events"
+            value={eventSummary?.total_events ?? report?.total_events ?? 0}
             tone="cyan"
           />
           <OperationalMetric
             label="Open problems"
-            value={report?.open_events ?? 0}
-            tone={report?.open_events ? 'rose' : 'emerald'}
+            value={eventSummary?.open_events ?? report?.open_events ?? 0}
+            tone={(eventSummary?.open_events ?? report?.open_events) ? 'rose' : 'emerald'}
           />
           <OperationalMetric
             label="Resolved"
-            value={report?.resolved_events ?? 0}
+            value={eventSummary?.resolved_events ?? report?.resolved_events ?? 0}
             tone="emerald"
           />
           <OperationalMetric
-            label="Discord connector"
-            value={discordDiagnostic?.ready ? 'Ready' : 'Needs config'}
-            tone={discordDiagnostic?.ready ? 'emerald' : 'amber'}
+            label="Last event"
+            value={formatEventDate(eventSummary?.last_event_at)}
+            tone={eventSummary?.last_event_at ? 'cyan' : 'amber'}
           />
+        </div>
+
+        <div className="mt-4 flex flex-wrap gap-3 text-sm text-slate-300">
+          <span className="rounded-md border border-white/10 bg-slate-950/60 px-3 py-2">
+            Unparsed events: {eventSummary?.unparsed_events ?? 0}
+          </span>
+          <span className="rounded-md border border-white/10 bg-slate-950/60 px-3 py-2">
+            Discord connector: {discordDiagnostic?.ready ? 'Ready' : 'Needs config'}
+          </span>
+          <span className="rounded-md border border-white/10 bg-slate-950/60 px-3 py-2">
+            Weekly window: {report?.total_events ?? 0} alerts
+          </span>
         </div>
 
         {operationsError ? (
@@ -281,6 +298,19 @@ export function HomePage() {
       </div>
     </section>
   );
+}
+
+function formatEventDate(value: string | null | undefined) {
+  if (!value) {
+    return 'No data';
+  }
+
+  return new Intl.DateTimeFormat(undefined, {
+    month: 'short',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(value));
 }
 
 function OperationalMetric({

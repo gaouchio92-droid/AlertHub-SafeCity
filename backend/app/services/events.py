@@ -1,5 +1,9 @@
 """Event query services."""
 
+from dataclasses import dataclass
+from datetime import datetime
+from typing import Any
+
 from sqlalchemy import Select, delete, func, or_, select
 from sqlalchemy.orm import Session
 
@@ -14,6 +18,28 @@ class EventIngestionResult:
         self.received = received
         self.created = created
         self.updated = updated
+
+
+@dataclass(frozen=True)
+class EventSummaryMetric:
+    """Count grouped by one event attribute."""
+
+    label: str
+    value: int
+
+
+@dataclass(frozen=True)
+class EventSummary:
+    """Operational event summary."""
+
+    total_events: int
+    open_events: int
+    resolved_events: int
+    unparsed_events: int
+    last_event_at: datetime | None
+    by_source: list[EventSummaryMetric]
+    by_status: list[EventSummaryMetric]
+    by_severity: list[EventSummaryMetric]
 
 
 class EventService:
@@ -51,6 +77,30 @@ class EventService:
         ).all()
         return list(events), total or 0
 
+    def summarize_events(self) -> EventSummary:
+        """Return aggregated event counters for operational dashboards."""
+        total_events = self._count_events()
+        open_events = self._count_events(Event.status.in_(("problem", "open", "active")))
+        resolved_events = self._count_events(Event.status == "resolved")
+        unparsed_events = self._count_events(Event.problem_name.is_(None))
+        last_event_at = self._db.scalar(
+            select(Event.started_at)
+            .where(Event.started_at.is_not(None))
+            .order_by(Event.started_at.desc())
+            .limit(1)
+        )
+
+        return EventSummary(
+            total_events=total_events,
+            open_events=open_events,
+            resolved_events=resolved_events,
+            unparsed_events=unparsed_events,
+            last_event_at=last_event_at,
+            by_source=self._count_by(Event.source),
+            by_status=self._count_by(Event.status),
+            by_severity=self._count_by(Event.severity),
+        )
+
     def upsert_connector_events(
         self,
         connector_events: list[ConnectorEvent],
@@ -77,6 +127,27 @@ class EventService:
             created=created,
             updated=updated,
         )
+
+    def _count_events(self, *conditions: Any) -> int:
+        statement = select(func.count(Event.id))
+        for condition in conditions:
+            statement = statement.where(condition)
+        return self._db.scalar(statement) or 0
+
+    def _count_by(self, column: Any) -> list[EventSummaryMetric]:
+        rows = self._db.execute(
+            select(column, func.count(Event.id))
+            .group_by(column)
+            .order_by(func.count(Event.id).desc())
+            .limit(8)
+        ).all()
+        return [
+            EventSummaryMetric(
+                label=str(label) if label else "unknown",
+                value=count,
+            )
+            for label, count in rows
+        ]
 
     @classmethod
     def _deduplicate_connector_events(

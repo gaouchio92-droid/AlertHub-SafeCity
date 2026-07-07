@@ -9,7 +9,7 @@ from app.api.v1.endpoints import events as events_endpoint
 from app.connectors.base import ConnectorEvent
 from app.main import app
 from app.schemas.events import EventResponse
-from app.services.events import EventIngestionResult
+from app.services.events import EventIngestionResult, EventSummary, EventSummaryMetric
 
 
 class StubEventService:
@@ -63,6 +63,23 @@ class StubEventService:
                 updated_at=timestamp,
             )
         ], 1
+
+    def summarize_events(self) -> EventSummary:
+        """Return deterministic summary data."""
+        timestamp = datetime(2026, 7, 6, 12, 0, tzinfo=UTC)
+        return EventSummary(
+            total_events=10,
+            open_events=3,
+            resolved_events=7,
+            unparsed_events=1,
+            last_event_at=timestamp,
+            by_source=[EventSummaryMetric(label="discord", value=10)],
+            by_status=[
+                EventSummaryMetric(label="resolved", value=7),
+                EventSummaryMetric(label="problem", value=3),
+            ],
+            by_severity=[EventSummaryMetric(label="high", value=4)],
+        )
 
 
 class StubSyncEventService:
@@ -133,6 +150,21 @@ def test_list_events_returns_paginated_events(monkeypatch: object) -> None:
     assert StubEventService.last_severity == "high"
     assert StubEventService.last_query == "router"
     assert StubEventService.last_include_unparsed is False
+
+
+def test_event_summary_returns_operational_counters(monkeypatch: object) -> None:
+    monkeypatch.setattr(events_endpoint, "EventService", StubEventService)
+    client = TestClient(app)
+
+    response = client.get("/api/v1/events/summary")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["total_events"] == 10
+    assert payload["open_events"] == 3
+    assert payload["resolved_events"] == 7
+    assert payload["unparsed_events"] == 1
+    assert payload["by_source"] == [{"label": "discord", "value": 10}]
 
 
 def test_list_events_can_include_unparsed_events(monkeypatch: object) -> None:

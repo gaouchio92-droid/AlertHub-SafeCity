@@ -118,6 +118,22 @@ export type EventSyncResult = {
   updated: number;
 };
 
+export type EventSummaryMetric = {
+  label: string;
+  value: number;
+};
+
+export type EventSummary = {
+  total_events: number;
+  open_events: number;
+  resolved_events: number;
+  unparsed_events: number;
+  last_event_at: string | null;
+  by_source: EventSummaryMetric[];
+  by_status: EventSummaryMetric[];
+  by_severity: EventSummaryMetric[];
+};
+
 export type AlertEvent = {
   id: string;
   source: string;
@@ -203,6 +219,11 @@ export async function getWeeklyDiscordReport(): Promise<WeeklyDiscordReport> {
 
 export async function syncEvents(): Promise<EventSyncResult> {
   const response = await apiClient.post<EventSyncResult>('/events/sync');
+  return response.data;
+}
+
+export async function getEventSummary(): Promise<EventSummary> {
+  const response = await apiClient.get<EventSummary>('/events/summary');
   return response.data;
 }
 

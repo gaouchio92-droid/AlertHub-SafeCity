@@ -38,6 +38,30 @@ class EventListResponse(BaseModel):
     offset: int = Field(ge=0)
 
 
+class EventSummaryMetricResponse(BaseModel):
+    """Aggregated event count by one dimension."""
+
+    model_config = ConfigDict(from_attributes=True, frozen=True)
+
+    label: str
+    value: int = Field(ge=0)
+
+
+class EventSummaryResponse(BaseModel):
+    """Operational event summary response."""
+
+    model_config = ConfigDict(from_attributes=True, frozen=True)
+
+    total_events: int = Field(ge=0)
+    open_events: int = Field(ge=0)
+    resolved_events: int = Field(ge=0)
+    unparsed_events: int = Field(ge=0)
+    last_event_at: datetime | None
+    by_source: list[EventSummaryMetricResponse]
+    by_status: list[EventSummaryMetricResponse]
+    by_severity: list[EventSummaryMetricResponse]
+
+
 class EventSyncResponse(BaseModel):
     """Connector event synchronization response."""
 

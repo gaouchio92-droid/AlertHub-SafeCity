@@ -7,10 +7,24 @@ from sqlalchemy.orm import Session
 
 from app.connectors.manager import connector_manager
 from app.database.session import get_db
-from app.schemas.events import EventListResponse, EventResponse, EventSyncResponse
+from app.schemas.events import (
+    EventListResponse,
+    EventResponse,
+    EventSummaryResponse,
+    EventSyncResponse,
+)
 from app.services.events import EventService
 
 router = APIRouter()
+
+
+@router.get("/summary", response_model=EventSummaryResponse, summary="Event summary")
+def event_summary(
+    db: Annotated[Session, Depends(get_db)],
+) -> EventSummaryResponse:
+    """Return operational counters for stored connector events."""
+    summary = EventService(db).summarize_events()
+    return EventSummaryResponse.model_validate(summary)
 
 
 @router.get("", response_model=EventListResponse, summary="List normalized events")
