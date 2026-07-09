@@ -37,6 +37,20 @@ class WeeklyDiscordReportMetricResponse(BaseModel):
     value: int
 
 
+class WeeklyDiscordSecurityAdvisoryResponse(BaseModel):
+    """Security advisory item included in management reports."""
+
+    model_config = ConfigDict(frozen=True)
+
+    component: str
+    current_version: str
+    severity: str
+    status: str
+    finding: str
+    recommendation: str
+    reference: str
+
+
 class WeeklyDiscordReportEventResponse(BaseModel):
     """Compact event row for report screens."""
 
@@ -109,5 +123,6 @@ class WeeklyDiscordReportResponse(BaseModel):
     by_severity: list[WeeklyDiscordReportMetricResponse]
     by_host: list[WeeklyDiscordReportMetricResponse]
     daily_trend: list[WeeklyDiscordReportDailyTrendResponse]
+    security_advisories: list[WeeklyDiscordSecurityAdvisoryResponse]
     open_problems: list[WeeklyDiscordOpenProblemResponse]
     recent_events: list[WeeklyDiscordReportEventResponse]

@@ -78,6 +78,16 @@ export type WeeklyDiscordReportMetric = {
   value: number;
 };
 
+export type WeeklyDiscordSecurityAdvisory = {
+  component: string;
+  current_version: string;
+  severity: string;
+  status: string;
+  finding: string;
+  recommendation: string;
+  reference: string;
+};
+
 export type WeeklyDiscordReportEvent = {
   problem_id: string | null;
   title: string;
@@ -130,6 +140,7 @@ export type WeeklyDiscordReport = {
   by_severity: WeeklyDiscordReportMetric[];
   by_host: WeeklyDiscordReportMetric[];
   daily_trend: WeeklyDiscordReportDailyTrend[];
+  security_advisories: WeeklyDiscordSecurityAdvisory[];
   open_problems: WeeklyDiscordOpenProblem[];
   recent_events: WeeklyDiscordReportEvent[];
 };

@@ -82,6 +82,13 @@ const translations = {
         'Finalize Discord parsing to reduce unreadable messages in reports.',
       openProblemsRecommendation:
         'Create daily tracking for open problems with an assigned owner.',
+      securityWatchTitle: 'Application security watch',
+      securityWatchSubtitle:
+        'Recent platform risks and hardening actions for the AlertHub runtime stack.',
+      component: 'Component',
+      exposure: 'Exposure',
+      recommendation: 'Recommendation',
+      reference: 'Reference',
       detectedHosts: 'Detected hosts',
       detectedSeverities: 'Detected severities',
       unresolvedTitle: 'Unresolved problems',
@@ -185,6 +192,13 @@ const translations = {
         'Finaliser le parsing Discord pour reduire les messages non lisibles dans les rapports.',
       openProblemsRecommendation:
         'Mettre en place un suivi quotidien des problemes ouverts avec responsable assigne.',
+      securityWatchTitle: 'Veille securite applicative',
+      securityWatchSubtitle:
+        "Risques recents de plateforme et actions de durcissement pour l'environnement AlertHub.",
+      component: 'Composant',
+      exposure: 'Exposition',
+      recommendation: 'Recommandation',
+      reference: 'Reference',
       detectedHosts: 'Hosts detectes',
       detectedSeverities: 'Severites detectees',
       unresolvedTitle: 'Problemes non resolus',

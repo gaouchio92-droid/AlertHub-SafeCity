@@ -18,6 +18,7 @@ import {
   WeeklyDiscordReportMetric,
   WeeklyDiscordOpenProblem,
   WeeklyDiscordReportStatus,
+  WeeklyDiscordSecurityAdvisory,
   getConnectorDiagnostics,
   getWeeklyDiscordReport,
   getWeeklyDiscordReportStatus,
@@ -209,6 +210,8 @@ export function ReportsPage() {
 
       <StabilizationRecommendationsPanel report={report} />
 
+      <SecurityAdvisoriesPanel items={report?.security_advisories ?? []} />
+
       <OpenProblemsPanel items={report?.open_problems ?? []} />
 
       <section className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
@@ -331,6 +334,62 @@ function MetricCard({ label, value }: { label: string; value: number }) {
       <p className="text-sm text-slate-400">{label}</p>
       <p className="mt-2 text-3xl font-semibold text-white">{value}</p>
     </div>
+  );
+}
+
+function SecurityAdvisoriesPanel({ items }: { items: WeeklyDiscordSecurityAdvisory[] }) {
+  const { t } = useI18n();
+
+  return (
+    <section className="rounded-md border border-amber-300/25 bg-amber-300/[0.06] p-6">
+      <div className="flex items-center gap-2">
+        <AlertTriangle className="h-5 w-5 text-amber-200" aria-hidden="true" />
+        <div>
+          <h3 className="text-lg font-semibold text-white">{t.reports.securityWatchTitle}</h3>
+          <p className="mt-2 text-sm leading-6 text-slate-300">
+            {t.reports.securityWatchSubtitle}
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-5 grid gap-4 xl:grid-cols-2">
+        {items.map((item) => (
+          <article
+            key={`${item.component}-${item.reference}`}
+            className="rounded-md border border-white/10 bg-slate-950/70 p-4"
+          >
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <p className="text-sm font-semibold text-white">{item.component}</p>
+                <p className="mt-1 text-xs text-slate-500">{item.current_version}</p>
+              </div>
+              <span className="inline-flex w-fit rounded-md bg-amber-400/10 px-2.5 py-1 text-xs font-semibold text-amber-100 ring-1 ring-amber-300/20">
+                {item.severity}
+              </span>
+            </div>
+
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <ProblemDetail label={t.reports.status} value={item.status} />
+              <ProblemDetail label={t.reports.reference} value={item.reference} />
+            </div>
+
+            <div className="mt-4 rounded-md border border-white/10 bg-white/[0.03] p-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                {t.reports.exposure}
+              </p>
+              <p className="mt-2 text-sm leading-6 text-slate-300">{item.finding}</p>
+            </div>
+
+            <div className="mt-4 rounded-md border border-emerald-300/15 bg-emerald-300/[0.04] p-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-emerald-200">
+                {t.reports.recommendation}
+              </p>
+              <p className="mt-2 text-sm leading-6 text-slate-200">{item.recommendation}</p>
+            </div>
+          </article>
+        ))}
+      </div>
+    </section>
   );
 }
 

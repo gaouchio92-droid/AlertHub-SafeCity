@@ -14,6 +14,7 @@ from app.schemas.reports import (
     WeeklyDiscordReportEventResponse,
     WeeklyDiscordReportMetricResponse,
     WeeklyDiscordReportResponse,
+    WeeklyDiscordSecurityAdvisoryResponse,
 )
 from app.services.report_pdf import build_weekly_discord_pdf
 
@@ -77,6 +78,7 @@ class ReportService:
                 period_end.date(),
                 all_discord_filters,
             ),
+            security_advisories=self._security_advisories(),
             open_problems=self._open_problems(open_problem_filters, period_end),
             recent_events=self._recent_events(readable_filters),
         )
@@ -120,6 +122,10 @@ class ReportService:
             "",
             *self._open_problem_lines(report),
             "",
+            "## Veille securite applicative",
+            "",
+            *self._security_advisory_lines(report),
+            "",
             "## Recommandations de stabilisation",
             "",
             *self._stabilization_recommendations(report),
@@ -144,6 +150,88 @@ class ReportService:
             findings=self._management_findings(report),
             recommendations=self._stabilization_recommendations(report),
         )
+
+    @staticmethod
+    def _security_advisories() -> list[WeeklyDiscordSecurityAdvisoryResponse]:
+        """Return current security watch items for the AlertHub runtime stack."""
+        return [
+            WeeklyDiscordSecurityAdvisoryResponse(
+                component="Vite dev server",
+                current_version="6.0.5",
+                severity="High",
+                status="Upgrade required",
+                finding=(
+                    "Recent Vite advisories affect 6.x dev-server file access controls before "
+                    "6.4.2. Production builds are less exposed, but development servers must not "
+                    "be internet-facing."
+                ),
+                recommendation=(
+                    "Upgrade Vite to at least 6.4.2, keep the dev server local-only, and never "
+                    "expose .env or source maps from development environments."
+                ),
+                reference="NVD CVE-2026-39365 / Vite advisories",
+            ),
+            WeeklyDiscordSecurityAdvisoryResponse(
+                component="Nginx reverse proxy",
+                current_version="1.27-alpine",
+                severity="High",
+                status="Upgrade required",
+                finding=(
+                    "The configured Nginx image is behind current fixed branches listed in 2026 "
+                    "Nginx security advisories."
+                ),
+                recommendation=(
+                    "Move to a patched stable image such as nginx:1.30.3-alpine or newer, pin "
+                    "images by digest in production, and rebuild the stack."
+                ),
+                reference="nginx.org security advisories",
+            ),
+            WeeklyDiscordSecurityAdvisoryResponse(
+                component="PostgreSQL",
+                current_version="16-alpine",
+                severity="Medium",
+                status="Patch validation required",
+                finding=(
+                    "The major tag does not show the exact minor version in configuration. "
+                    "PostgreSQL security fixes are delivered through minor releases."
+                ),
+                recommendation=(
+                    "Pin and run the latest PostgreSQL 16 minor image, verify backups before "
+                    "upgrade, then apply migrations after the database is healthy."
+                ),
+                reference="PostgreSQL security information",
+            ),
+            WeeklyDiscordSecurityAdvisoryResponse(
+                component="FastAPI / Starlette stack",
+                current_version="FastAPI 0.115.14",
+                severity="Medium",
+                status="Monitor and audit",
+                finding=(
+                    "FastAPI depends on Starlette and ASGI middleware behavior. Recent Host "
+                    "header and request handling advisories make dependency auditing important."
+                ),
+                recommendation=(
+                    "Run pip-audit in CI, pin Starlette through FastAPI-compatible upgrades, "
+                    "and keep trusted host/proxy headers strict at the edge."
+                ),
+                reference="FastAPI and Starlette advisories",
+            ),
+            WeeklyDiscordSecurityAdvisoryResponse(
+                component="Secrets and Discord token",
+                current_version="Environment-based secrets",
+                severity="High",
+                status="Operational control required",
+                finding=(
+                    "Discord tokens, database credentials, and JWT secrets are environment "
+                    "secrets. Exposure would allow bot abuse or data access."
+                ),
+                recommendation=(
+                    "Rotate exposed tokens immediately, keep .env out of Git, use production "
+                    "secret storage, and restrict bot permissions to the reporting channel."
+                ),
+                reference="AlertHub security baseline",
+            ),
+        ]
 
     def _metrics(
         self,
@@ -317,6 +405,20 @@ class ReportService:
                 f"age: {problem.age_label} | action: {problem.recommended_action}"
             )
             for problem in report.open_problems[:10]
+        ]
+
+    @staticmethod
+    def _security_advisory_lines(
+        report: WeeklyDiscordReportResponse,
+    ) -> list[str]:
+        if not report.security_advisories:
+            return ["- Aucune alerte securite applicative configuree."]
+        return [
+            (
+                f"- {item.component} ({item.current_version}) | severite: {item.severity} | "
+                f"statut: {item.status} | action: {item.recommendation}"
+            )
+            for item in report.security_advisories
         ]
 
     def _stabilization_recommendations(

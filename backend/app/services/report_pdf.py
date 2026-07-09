@@ -208,6 +208,9 @@ def build_weekly_discord_pdf(
             _section_title("Derniers evenements significatifs", styles),
             _events_table(report),
             PageBreak(),
+            _section_title("Veille securite applicative", styles),
+            _security_advisories_table(report),
+            Spacer(1, 18),
             _section_title("Recommandations de stabilisation", styles),
             _recommendation_cards(recommendations, styles),
             Spacer(1, 18),
@@ -443,6 +446,44 @@ def _open_problems_table(report: WeeklyDiscordReportResponse) -> Table:
     table = Table(
         rows,
         colWidths=[10.2 * cm, 5.2 * cm, 3 * cm, 2.4 * cm, 6.1 * cm],
+        repeatRows=1,
+    )
+    table.setStyle(_table_style())
+    return table
+
+
+def _security_advisories_table(report: WeeklyDiscordReportResponse) -> Table:
+    styles = _styles()
+    rows = [
+        [
+            _th("Composant", styles),
+            _th("Severite", styles),
+            _th("Statut", styles),
+            _th("Risque observe", styles),
+            _th("Solution recommandee", styles),
+        ]
+    ]
+    for advisory in report.security_advisories:
+        rows.append(
+            [
+                _td(f"{advisory.component}\n{advisory.current_version}", styles),
+                _td(advisory.severity, styles),
+                _td(advisory.status, styles),
+                _td(advisory.finding, styles),
+                _td(advisory.recommendation, styles),
+            ]
+        )
+    if len(rows) == 1:
+        rows.append([
+            _td("Aucune alerte", styles),
+            _td("-", styles),
+            _td("-", styles),
+            _td("-", styles),
+            _td("-", styles),
+        ])
+    table = Table(
+        rows,
+        colWidths=[4.3 * cm, 2.3 * cm, 3.2 * cm, 8.2 * cm, 8.9 * cm],
         repeatRows=1,
     )
     table.setStyle(_table_style())
