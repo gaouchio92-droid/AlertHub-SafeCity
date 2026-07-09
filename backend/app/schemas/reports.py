@@ -17,6 +17,17 @@ class WeeklyDiscordReportStatusResponse(BaseModel):
     required_before_available: list[str]
 
 
+class WeeklyDiscordReportPushResponse(BaseModel):
+    """Result of publishing a generated report to Discord."""
+
+    model_config = ConfigDict(frozen=True)
+
+    delivered: bool
+    channel_id: str
+    message_id: str | None
+    filename: str
+
+
 class WeeklyDiscordReportMetricResponse(BaseModel):
     """Named report metric."""
 

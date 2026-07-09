@@ -66,6 +66,13 @@ export type WeeklyDiscordReportStatus = {
   required_before_available: string[];
 };
 
+export type WeeklyDiscordReportPushResult = {
+  delivered: boolean;
+  channel_id: string;
+  message_id: string | null;
+  filename: string;
+};
+
 export type WeeklyDiscordReportMetric = {
   label: string;
   value: number;
@@ -229,6 +236,13 @@ export async function getWeeklyDiscordReportStatus(): Promise<WeeklyDiscordRepor
 
 export async function getWeeklyDiscordReport(): Promise<WeeklyDiscordReport> {
   const response = await apiClient.get<WeeklyDiscordReport>('/reports/weekly-discord');
+  return response.data;
+}
+
+export async function pushWeeklyDiscordReportToDiscord(): Promise<WeeklyDiscordReportPushResult> {
+  const response = await apiClient.post<WeeklyDiscordReportPushResult>(
+    '/reports/weekly-discord/push-discord',
+  );
   return response.data;
 }
 

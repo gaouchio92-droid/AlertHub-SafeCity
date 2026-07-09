@@ -2,12 +2,21 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
+from app.core.config.settings import Settings, get_settings
 from app.database.session import get_db
-from app.schemas.reports import WeeklyDiscordReportResponse, WeeklyDiscordReportStatusResponse
+from app.schemas.reports import (
+    WeeklyDiscordReportPushResponse,
+    WeeklyDiscordReportResponse,
+    WeeklyDiscordReportStatusResponse,
+)
+from app.services.discord_report_publisher import (
+    DiscordReportPublisher,
+    DiscordReportPublisherError,
+)
 from app.services.reports import ReportService
 
 router = APIRouter()
@@ -87,4 +96,40 @@ def export_weekly_discord_report_pdf(
                 'attachment; filename="alerthub-weekly-discord-report.pdf"'
             ),
         },
+    )
+
+
+@router.post(
+    "/weekly-discord/push-discord",
+    response_model=WeeklyDiscordReportPushResponse,
+    summary="Push weekly Discord PDF report to Discord",
+)
+def push_weekly_discord_report_to_discord(
+    db: Annotated[Session, Depends(get_db)],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> WeeklyDiscordReportPushResponse:
+    """Generate the weekly PDF report and publish it to the configured Discord channel."""
+    filename = "alerthub-weekly-discord-report.pdf"
+    content = ReportService(db).build_weekly_discord_management_pdf()
+    try:
+        delivery = DiscordReportPublisher(settings).publish_pdf(
+            content,
+            filename=filename,
+            summary=(
+                "**AlertHub Safe City**\n"
+                "Rapport hebdomadaire PDF genere automatiquement. "
+                "Veuillez consulter la piece jointe pour les problemes non resolus."
+            ),
+        )
+    except DiscordReportPublisherError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=str(exc),
+        ) from exc
+
+    return WeeklyDiscordReportPushResponse(
+        delivered=delivery.delivered,
+        channel_id=delivery.channel_id,
+        message_id=delivery.message_id,
+        filename=delivery.filename,
     )

@@ -6,6 +6,7 @@ import {
   Database,
   FileDown,
   RefreshCw,
+  Send,
   Server,
 } from 'lucide-react';
 
@@ -20,6 +21,7 @@ import {
   getConnectorDiagnostics,
   getWeeklyDiscordReport,
   getWeeklyDiscordReportStatus,
+  pushWeeklyDiscordReportToDiscord,
   syncEvents,
 } from '../services/api';
 import { useI18n } from '../i18n/I18nProvider';
@@ -48,6 +50,8 @@ export function ReportsPage() {
   const [discordDiagnostic, setDiscordDiagnostic] = useState<ConnectorDiagnostic | null>(null);
   const [syncResult, setSyncResult] = useState<EventSyncResult | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isPushingReport, setIsPushingReport] = useState(false);
+  const [pushMessage, setPushMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const readableEvents = useMemo(() => {
@@ -81,6 +85,7 @@ export function ReportsPage() {
 
   async function handleSync() {
     setIsSyncing(true);
+    setPushMessage(null);
     try {
       const response = await syncEvents();
       setSyncResult(response);
@@ -89,6 +94,22 @@ export function ReportsPage() {
       setError(t.reports.syncFailed);
     } finally {
       setIsSyncing(false);
+    }
+  }
+
+  async function handlePushReportToDiscord() {
+    setIsPushingReport(true);
+    setPushMessage(null);
+    setError(null);
+    try {
+      const response = await pushWeeklyDiscordReportToDiscord();
+      setPushMessage(
+        `${t.reports.pushDiscordSuccess} (${response.filename}, channel ${response.channel_id})`,
+      );
+    } catch {
+      setError(t.reports.pushDiscordFailed);
+    } finally {
+      setIsPushingReport(false);
     }
   }
 
@@ -113,6 +134,15 @@ export function ReportsPage() {
             <FileDown className="h-4 w-4" aria-hidden="true" />
             {t.reports.exportPdf}
           </a>
+          <button
+            type="button"
+            onClick={handlePushReportToDiscord}
+            disabled={isPushingReport}
+            className="inline-flex items-center justify-center gap-2 rounded-md bg-emerald-400 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <Send className={['h-4 w-4', isPushingReport ? 'animate-pulse' : ''].join(' ')} />
+            {isPushingReport ? t.reports.pushingDiscord : t.reports.pushDiscord}
+          </button>
           <a
             href="/api/v1/reports/weekly-discord/export"
             download="alerthub-weekly-discord-report.md"
@@ -251,6 +281,12 @@ export function ReportsPage() {
           ) : null}
         </div>
       </section>
+
+      {pushMessage ? (
+        <p className="rounded-md border border-emerald-300/20 bg-emerald-300/[0.08] p-4 text-sm text-emerald-100">
+          {pushMessage}
+        </p>
+      ) : null}
 
       {error ? <p className="text-sm text-rose-300">{error}</p> : null}
     </section>

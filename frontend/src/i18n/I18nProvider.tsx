@@ -36,6 +36,10 @@ const translations = {
       subtitle:
         'A seven-day operational view of Discord events collected from the configured alert channel and stored in PostgreSQL.',
       exportPdf: 'Export PDF',
+      pushDiscord: 'Send to Discord',
+      pushingDiscord: 'Sending...',
+      pushDiscordSuccess: 'PDF report sent to the configured Discord channel.',
+      pushDiscordFailed: 'Discord report delivery failed',
       markdown: 'Markdown',
       syncDiscord: 'Sync Discord',
       weeklyReport: 'Weekly Discord report',
@@ -135,6 +139,10 @@ const translations = {
       subtitle:
         "Vue operationnelle sur sept jours des evenements Discord collectes depuis le salon d'alertes configure et stockes dans PostgreSQL.",
       exportPdf: 'Exporter PDF',
+      pushDiscord: 'Envoyer a Discord',
+      pushingDiscord: 'Envoi...',
+      pushDiscordSuccess: 'Rapport PDF envoye au salon Discord configure.',
+      pushDiscordFailed: "Echec de l'envoi du rapport vers Discord",
       markdown: 'Markdown',
       syncDiscord: 'Synchroniser Discord',
       weeklyReport: 'Rapport Discord hebdomadaire',
