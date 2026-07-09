@@ -6,8 +6,10 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
+from app.api.dependencies.auth import require_permission
 from app.core.config.settings import Settings, get_settings
 from app.database.session import get_db
+from app.models.identity import User
 from app.schemas.reports import (
     WeeklyDiscordReportPushResponse,
     WeeklyDiscordReportResponse,
@@ -20,6 +22,7 @@ from app.services.discord_report_publisher import (
 from app.services.reports import ReportService
 
 router = APIRouter()
+require_report_push = require_permission("reports:push_discord")
 
 
 @router.get(
@@ -107,6 +110,7 @@ def export_weekly_discord_report_pdf(
 def push_weekly_discord_report_to_discord(
     db: Annotated[Session, Depends(get_db)],
     settings: Annotated[Settings, Depends(get_settings)],
+    _user: Annotated[User, Depends(require_report_push)],
 ) -> WeeklyDiscordReportPushResponse:
     """Generate the weekly PDF report and publish it to the configured Discord channel."""
     filename = "alerthub-weekly-discord-report.pdf"

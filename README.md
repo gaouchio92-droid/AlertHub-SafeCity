@@ -127,6 +127,16 @@ alembic upgrade head
 AlertHub Safe City uses a modular connector architecture. Discord is the default event source.
 Zabbix API and Zabbix Database connectors are optional and disabled by default.
 
+Connector administration and settings screens require an authenticated user with the `admin` role.
+The first administrator is bootstrapped from environment variables:
+
+```env
+AUTH_ENABLED=true
+BOOTSTRAP_ADMIN_EMAIL=admin@alerthub.local
+BOOTSTRAP_ADMIN_USERNAME=admin
+BOOTSTRAP_ADMIN_PASSWORD=replace-with-a-secure-admin-password
+```
+
 Configure connector selection with environment variables:
 
 ```env

@@ -3,6 +3,7 @@
 from fastapi.testclient import TestClient
 from pytest import MonkeyPatch
 
+from app.api.dependencies.auth import require_admin
 from app.api.v1.endpoints import connectors as connectors_endpoint
 from app.core.config.settings import Settings
 from app.main import app
@@ -22,9 +23,13 @@ def build_settings(**overrides: object) -> Settings:
 
 
 def test_connector_runtime_endpoint_returns_non_sensitive_configuration() -> None:
+    app.dependency_overrides[require_admin] = lambda: object()
     client = TestClient(app)
 
-    response = client.get("/api/v1/connectors/runtime")
+    try:
+        response = client.get("/api/v1/connectors/runtime")
+    finally:
+        app.dependency_overrides.clear()
 
     assert response.status_code == 200
     payload = response.json()
@@ -37,9 +42,13 @@ def test_connector_runtime_endpoint_returns_non_sensitive_configuration() -> Non
 
 
 def test_connector_event_model_endpoint_returns_contract() -> None:
+    app.dependency_overrides[require_admin] = lambda: object()
     client = TestClient(app)
 
-    response = client.get("/api/v1/connectors/event-model")
+    try:
+        response = client.get("/api/v1/connectors/event-model")
+    finally:
+        app.dependency_overrides.clear()
 
     assert response.status_code == 200
     payload = response.json()
@@ -52,9 +61,13 @@ def test_connector_diagnostics_endpoint_returns_missing_configuration_without_se
     monkeypatch: MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(connectors_endpoint, "get_settings", build_settings)
+    app.dependency_overrides[require_admin] = lambda: object()
     client = TestClient(app)
 
-    response = client.get("/api/v1/connectors/diagnostics")
+    try:
+        response = client.get("/api/v1/connectors/diagnostics")
+    finally:
+        app.dependency_overrides.clear()
 
     assert response.status_code == 200
     payload = response.json()
@@ -67,9 +80,13 @@ def test_connector_diagnostics_endpoint_returns_missing_configuration_without_se
 
 
 def test_connector_configuration_guide_endpoint_lists_env_vars_without_values() -> None:
+    app.dependency_overrides[require_admin] = lambda: object()
     client = TestClient(app)
 
-    response = client.get("/api/v1/connectors/configuration-guide")
+    try:
+        response = client.get("/api/v1/connectors/configuration-guide")
+    finally:
+        app.dependency_overrides.clear()
 
     assert response.status_code == 200
     payload = response.json()

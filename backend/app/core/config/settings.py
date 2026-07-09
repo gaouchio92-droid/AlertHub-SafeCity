@@ -56,6 +56,10 @@ class Settings(BaseSettings):
 
     log_level: str = "INFO"
     sync_interval_seconds: int = Field(default=300, ge=60)
+    auth_enabled: bool = True
+    bootstrap_admin_email: str = "admin@alerthub.local"
+    bootstrap_admin_username: str = "admin"
+    bootstrap_admin_password: str = Field(default="ChangeMeAdminPassword123!", min_length=12)
 
     @model_validator(mode="after")
     def validate_production_secrets(self) -> "Settings":
@@ -69,6 +73,8 @@ class Settings(BaseSettings):
             "replace-with-a-secure-random-secret-key",
             "replace-with-a-secure-random-jwt-secret",
             "replace-with-a-secure-database-password",
+            "replace-with-a-secure-admin-password",
+            "ChangeMeAdminPassword123!",
             "alerthub_password",
         }
         required_secrets = {
@@ -76,6 +82,8 @@ class Settings(BaseSettings):
             "POSTGRES_PASSWORD": self.postgres_password,
             "JWT_SECRET": self.jwt_secret,
         }
+        if self.auth_enabled:
+            required_secrets["BOOTSTRAP_ADMIN_PASSWORD"] = self.bootstrap_admin_password
         if self.enable_discord:
             required_secrets["DISCORD_TOKEN"] = self.discord_token
             required_secrets["DISCORD_CHANNEL_ID"] = self.discord_channel_id

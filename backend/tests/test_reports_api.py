@@ -111,6 +111,7 @@ def test_weekly_discord_report_can_be_pushed_to_discord(monkeypatch: MonkeyPatch
     )
     app.dependency_overrides[reports_endpoint.get_db] = fake_db
     app.dependency_overrides[reports_endpoint.get_settings] = fake_settings
+    app.dependency_overrides[reports_endpoint.require_report_push] = lambda: object()
     client = TestClient(app)
 
     try:

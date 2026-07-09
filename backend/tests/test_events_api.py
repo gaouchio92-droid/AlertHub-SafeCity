@@ -188,9 +188,13 @@ def test_list_events_validates_limit() -> None:
 def test_sync_events_collects_and_persists_connector_events(monkeypatch: object) -> None:
     monkeypatch.setattr(events_endpoint, "connector_manager", StubConnectorManager())
     monkeypatch.setattr(events_endpoint, "EventService", StubSyncEventService)
+    app.dependency_overrides[events_endpoint.require_event_sync] = lambda: object()
     client = TestClient(app)
 
-    response = client.post("/api/v1/events/sync")
+    try:
+        response = client.post("/api/v1/events/sync")
+    finally:
+        app.dependency_overrides.clear()
 
     assert response.status_code == 200
     assert response.json() == {"received": 2, "created": 1, "updated": 1}

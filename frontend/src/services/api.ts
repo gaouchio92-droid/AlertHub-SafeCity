@@ -6,6 +6,29 @@ export type ConnectorStatus = {
   connected: boolean;
 };
 
+export type LoginRequest = {
+  username: string;
+  password: string;
+};
+
+export type TokenResponse = {
+  access_token: string;
+  token_type: string;
+  expires_in_minutes: number;
+};
+
+export type CurrentUser = {
+  id: string;
+  email: string;
+  username: string;
+  full_name: string | null;
+  is_active: boolean;
+  is_superuser: boolean;
+  roles: string[];
+  groups: string[];
+  permissions: string[];
+};
+
 export type ConnectorCatalogItem = {
   source: string;
   name: string;
@@ -207,6 +230,24 @@ export const apiClient = axios.create({
     'Content-Type': 'application/json',
   },
 });
+
+apiClient.interceptors.request.use((config) => {
+  const token = window.localStorage.getItem('alerthub-access-token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+export async function login(payload: LoginRequest): Promise<TokenResponse> {
+  const response = await apiClient.post<TokenResponse>('/auth/login', payload);
+  return response.data;
+}
+
+export async function getCurrentUser(): Promise<CurrentUser> {
+  const response = await apiClient.get<CurrentUser>('/auth/me');
+  return response.data;
+}
 
 export async function getConnectorStatuses(): Promise<ConnectorStatus[]> {
   const response = await apiClient.get<ConnectorStatus[]>('/connectors');

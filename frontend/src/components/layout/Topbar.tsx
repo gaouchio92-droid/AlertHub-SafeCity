@@ -1,6 +1,7 @@
-import { Activity, Menu, Search } from 'lucide-react';
+import { Activity, LogIn, LogOut, Menu, Search } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
 
+import { useAuth } from '../../auth/AuthProvider';
 import { Language, useI18n } from '../../i18n/I18nProvider';
 
 type TopbarProps = {
@@ -9,6 +10,7 @@ type TopbarProps = {
 
 export function Topbar({ onOpenMenu }: TopbarProps) {
   const { language, setLanguage, t } = useI18n();
+  const { logout, user } = useAuth();
 
   return (
     <header className="sticky top-0 z-20 border-b border-white/10 bg-slate-950/85 backdrop-blur">
@@ -70,6 +72,27 @@ export function Topbar({ onOpenMenu }: TopbarProps) {
               {item.toUpperCase()}
             </button>
           ))}
+        </div>
+
+        <div className="hidden items-center gap-2 rounded-md border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-slate-200 md:flex">
+          {user ? (
+            <>
+              <span className="max-w-36 truncate">{user.username}</span>
+              <button
+                type="button"
+                onClick={logout}
+                className="rounded text-slate-300 transition hover:text-white"
+                aria-label="Logout"
+              >
+                <LogOut className="h-4 w-4" aria-hidden="true" />
+              </button>
+            </>
+          ) : (
+            <NavLink className="inline-flex items-center gap-2 text-slate-300 hover:text-white" to="/login">
+              <LogIn className="h-4 w-4" aria-hidden="true" />
+              Login
+            </NavLink>
+          )}
         </div>
 
         <div className="hidden items-center gap-2 rounded-md border border-emerald-400/20 bg-emerald-400/10 px-3 py-2 text-sm font-medium text-emerald-200 sm:flex">

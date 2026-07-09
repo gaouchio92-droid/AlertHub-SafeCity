@@ -1,7 +1,8 @@
 """Connector status endpoints."""
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
+from app.api.dependencies.auth import require_admin
 from app.connectors.catalog import CONNECTOR_CATALOG
 from app.connectors.diagnostics import build_connector_diagnostics
 from app.connectors.event_model import EVENT_MODEL_FIELDS
@@ -18,7 +19,7 @@ from app.schemas.connectors import (
     EventModelResponse,
 )
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_admin)])
 
 
 @router.get("", response_model=list[ConnectorStatusResponse], summary="Connector status")
