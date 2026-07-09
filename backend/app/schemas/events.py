@@ -22,6 +22,12 @@ class EventResponse(BaseModel):
     started_at: datetime | None
     resolved_at: datetime | None
     duration: int | None
+    operational_data: str | None
+    links: list[str]
+    escalation_priority: int | None
+    escalation_level: str | None
+    escalation_owner: str | None
+    escalation_due_at: datetime | None
     raw_payload: dict[str, Any]
     created_at: datetime
     updated_at: datetime

@@ -437,6 +437,25 @@ function OpenProblemsPanel({ items }: { items: WeeklyDiscordOpenProblem[] }) {
               <ProblemDetail label={t.reports.status} value={problem.status ?? t.reports.unknown} />
             </div>
 
+            <div className="mt-3 grid gap-3 sm:grid-cols-4">
+              <ProblemDetail
+                label="Priority"
+                value={problem.escalation_priority?.toString() ?? t.reports.unknown}
+              />
+              <ProblemDetail
+                label="Level"
+                value={problem.escalation_level ?? t.reports.unknown}
+              />
+              <ProblemDetail
+                label="Owner"
+                value={problem.escalation_owner ?? t.reports.notDetected}
+              />
+              <ProblemDetail
+                label="Due"
+                value={formatDateTime(problem.escalation_due_at, t.reports.noTimestamp)}
+              />
+            </div>
+
             {problem.operational_data ? (
               <div className="mt-4 rounded-md border border-white/10 bg-white/[0.03] p-3">
                 <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">

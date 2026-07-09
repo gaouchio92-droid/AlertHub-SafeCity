@@ -1,14 +1,33 @@
 """Event query services."""
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import Select, delete, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.connectors.base import ConnectorEvent
+from app.core.config.settings import get_settings
 from app.models.event import Event
+
+OPEN_STATUSES = {"problem", "open", "active"}
+SEVERITY_PRIORITY = {
+    "disaster": 100,
+    "high": 90,
+    "average": 70,
+    "warning": 50,
+    "information": 25,
+    "not_classified": 10,
+}
+SEVERITY_SLA = {
+    "disaster": timedelta(minutes=30),
+    "high": timedelta(hours=1),
+    "average": timedelta(hours=4),
+    "warning": timedelta(hours=12),
+    "information": timedelta(days=2),
+    "not_classified": timedelta(days=3),
+}
 
 
 class EventIngestionResult:
@@ -205,7 +224,10 @@ class EventService:
                 "started_at": min(started_at_values) if started_at_values else None,
                 "resolved_at": max(resolved_at_values) if resolved_at_values else None,
                 "duration": next_event.duration or current_event.duration,
-                "raw_payload": next_event.raw_payload or current_event.raw_payload,
+                "raw_payload": EventService._merge_raw_payloads(
+                    current_event.raw_payload,
+                    next_event.raw_payload,
+                ),
             }
         )
 
@@ -282,6 +304,8 @@ class EventService:
 
     @staticmethod
     def _build_event(connector_event: ConnectorEvent) -> Event:
+        normalized = EventService._normalized_payload(connector_event)
+        escalation = EventService._escalation_context(connector_event)
         return Event(
             source=connector_event.source,
             problem_id=connector_event.problem_id,
@@ -292,11 +316,19 @@ class EventService:
             started_at=connector_event.started_at,
             resolved_at=connector_event.resolved_at,
             duration=connector_event.duration,
+            operational_data=EventService._normalized_string(normalized, "operational_data"),
+            links=EventService._normalized_links(normalized),
+            escalation_priority=escalation["priority"],
+            escalation_level=escalation["level"],
+            escalation_owner=escalation["owner"],
+            escalation_due_at=escalation["due_at"],
             raw_payload=connector_event.raw_payload,
         )
 
     @staticmethod
     def _apply_connector_event(event: Event, connector_event: ConnectorEvent) -> None:
+        normalized = EventService._normalized_payload(connector_event)
+        escalation = EventService._escalation_context(connector_event)
         event.host = connector_event.host
         event.severity = connector_event.severity
         event.status = connector_event.status
@@ -304,4 +336,106 @@ class EventService:
         event.started_at = connector_event.started_at
         event.resolved_at = connector_event.resolved_at
         event.duration = connector_event.duration
+        event.operational_data = EventService._normalized_string(normalized, "operational_data")
+        event.links = EventService._normalized_links(normalized)
+        event.escalation_priority = escalation["priority"]
+        event.escalation_level = escalation["level"]
+        event.escalation_owner = escalation["owner"]
+        event.escalation_due_at = escalation["due_at"]
         event.raw_payload = connector_event.raw_payload
+
+    @staticmethod
+    def _normalized_payload(connector_event: ConnectorEvent) -> dict[str, Any]:
+        normalized = connector_event.raw_payload.get("normalized")
+        return normalized if isinstance(normalized, dict) else {}
+
+    @staticmethod
+    def _merge_raw_payloads(
+        current_payload: dict[str, Any],
+        next_payload: dict[str, Any],
+    ) -> dict[str, Any]:
+        merged = {**current_payload, **next_payload}
+        current_normalized = current_payload.get("normalized")
+        next_normalized = next_payload.get("normalized")
+        if isinstance(current_normalized, dict) or isinstance(next_normalized, dict):
+            merged_normalized = {
+                **(current_normalized if isinstance(current_normalized, dict) else {}),
+                **(next_normalized if isinstance(next_normalized, dict) else {}),
+            }
+            current_links = current_normalized.get("links") if isinstance(current_normalized, dict) else []
+            next_links = next_normalized.get("links") if isinstance(next_normalized, dict) else []
+            current_links = current_links if isinstance(current_links, list) else []
+            next_links = next_links if isinstance(next_links, list) else []
+            links = [str(link) for link in [*current_links, *next_links] if link]
+            merged_normalized["links"] = list(dict.fromkeys(links))
+            if not merged_normalized.get("operational_data") and isinstance(current_normalized, dict):
+                merged_normalized["operational_data"] = current_normalized.get("operational_data")
+            merged["normalized"] = merged_normalized
+        return merged
+
+    @staticmethod
+    def _normalized_string(normalized: dict[str, Any], key: str) -> str | None:
+        value = normalized.get(key)
+        return str(value) if value else None
+
+    @staticmethod
+    def _normalized_links(normalized: dict[str, Any]) -> list[str]:
+        links = normalized.get("links")
+        if not isinstance(links, list):
+            return []
+        return [str(link) for link in links if link]
+
+    @staticmethod
+    def _escalation_context(connector_event: ConnectorEvent) -> dict[str, Any]:
+        severity = (connector_event.severity or "not_classified").lower()
+        status = (connector_event.status or "").lower()
+        if status not in OPEN_STATUSES:
+            return {
+                "priority": None,
+                "level": None,
+                "owner": None,
+                "due_at": None,
+            }
+
+        now = datetime.now(UTC)
+        started_at = EventService._aware_datetime(connector_event.started_at) or now
+        age_seconds = max(int((now - started_at).total_seconds()), 0)
+        base_priority = SEVERITY_PRIORITY.get(severity, SEVERITY_PRIORITY["not_classified"])
+        age_boost = min(age_seconds // 3600, 30)
+        priority = min(base_priority + age_boost, 100)
+
+        if priority >= 95:
+            level = "P1"
+        elif priority >= 75:
+            level = "P2"
+        elif priority >= 50:
+            level = "P3"
+        else:
+            level = "P4"
+
+        sla = SEVERITY_SLA.get(severity, SEVERITY_SLA["not_classified"])
+        return {
+            "priority": priority,
+            "level": level,
+            "owner": EventService._owner_for_severity(severity),
+            "due_at": started_at + sla,
+        }
+
+    @staticmethod
+    def _owner_for_severity(severity: str) -> str:
+        settings = get_settings()
+        rules: dict[str, str] = {}
+        for item in settings.escalation_owner_rules.split(";"):
+            if ":" not in item:
+                continue
+            key, value = item.split(":", 1)
+            rules[key.strip().lower()] = value.strip()
+        return rules.get(severity, settings.default_escalation_owner)
+
+    @staticmethod
+    def _aware_datetime(value: datetime | None) -> datetime | None:
+        if value is None:
+            return None
+        if value.tzinfo is None:
+            return value.replace(tzinfo=UTC)
+        return value.astimezone(UTC)

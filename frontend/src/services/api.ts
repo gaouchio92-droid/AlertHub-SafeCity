@@ -133,6 +133,10 @@ export type WeeklyDiscordOpenProblem = {
   started_at: string | null;
   age_seconds: number | null;
   age_label: string;
+  escalation_priority: number | null;
+  escalation_level: string | null;
+  escalation_owner: string | null;
+  escalation_due_at: string | null;
   operational_data: string | null;
   links: string[];
   recommended_action: string;
@@ -201,6 +205,12 @@ export type AlertEvent = {
   started_at: string | null;
   resolved_at: string | null;
   duration: number | null;
+  operational_data: string | null;
+  links: string[];
+  escalation_priority: number | null;
+  escalation_level: string | null;
+  escalation_owner: string | null;
+  escalation_due_at: string | null;
   raw_payload: Record<string, unknown>;
   created_at: string;
   updated_at: string;

@@ -81,6 +81,10 @@ class WeeklyDiscordOpenProblemResponse(BaseModel):
     started_at: datetime | None
     age_seconds: int | None
     age_label: str
+    escalation_priority: int | None
+    escalation_level: str | None
+    escalation_owner: str | None
+    escalation_due_at: datetime | None
     operational_data: str | None
     links: list[str]
     recommended_action: str

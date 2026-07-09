@@ -56,6 +56,14 @@ class Settings(BaseSettings):
 
     log_level: str = "INFO"
     sync_interval_seconds: int = Field(default=300, ge=60)
+    default_escalation_owner: str = "NOC Team"
+    escalation_owner_rules: str = (
+        "disaster:Incident Manager;"
+        "high:NOC Lead;"
+        "average:NOC Operator;"
+        "warning:NOC Operator;"
+        "information:Monitoring Team"
+    )
     auth_enabled: bool = True
     bootstrap_admin_email: str = "admin@alerthub.local"
     bootstrap_admin_username: str = "admin"

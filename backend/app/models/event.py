@@ -20,6 +20,7 @@ class Event(Base):
         UniqueConstraint("source", "problem_id", name="uq_events_source_problem_id"),
         Index("ix_events_source_started_at", "source", "started_at"),
         Index("ix_events_status_started_at", "status", "started_at"),
+        Index("ix_events_escalation_priority", "escalation_priority"),
     )
 
     id: Mapped[UUID] = mapped_column(
@@ -40,6 +41,12 @@ class Event(Base):
     )
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     duration: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    operational_data: Mapped[str | None] = mapped_column(Text, nullable=True)
+    links: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
+    escalation_priority: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    escalation_level: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
+    escalation_owner: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    escalation_due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     raw_payload: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

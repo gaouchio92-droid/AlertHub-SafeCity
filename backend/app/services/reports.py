@@ -312,8 +312,8 @@ class ReportService:
                 problem_name=event.problem_name,
                 started_at=event.started_at,
                 details_available=bool(event.problem_name or event.severity),
-                operational_data=self._normalized_value(event, "operational_data"),
-                links=self._normalized_links(event),
+                operational_data=event.operational_data or self._normalized_value(event, "operational_data"),
+                links=event.links or self._normalized_links(event),
             )
             for event in events
         ]
@@ -327,6 +327,7 @@ class ReportService:
             select(Event)
             .where(*base_filters)
             .order_by(
+                Event.escalation_priority.desc().nullslast(),
                 Event.started_at.asc().nullslast(),
                 Event.created_at.asc(),
             )
@@ -342,8 +343,12 @@ class ReportService:
                 started_at=event.started_at,
                 age_seconds=self._age_seconds(event.started_at, period_end),
                 age_label=self._age_label(event.started_at, period_end),
-                operational_data=self._normalized_value(event, "operational_data"),
-                links=self._normalized_links(event),
+                escalation_priority=self._event_escalation_priority(event),
+                escalation_level=event.escalation_level or self._event_escalation_level(event),
+                escalation_owner=event.escalation_owner or self._event_escalation_owner(event),
+                escalation_due_at=event.escalation_due_at,
+                operational_data=event.operational_data or self._normalized_value(event, "operational_data"),
+                links=event.links or self._normalized_links(event),
                 recommended_action=self._recommended_action(event),
             )
             for event in events
@@ -402,6 +407,9 @@ class ReportService:
             (
                 f"- {problem.title} | host: {problem.host or 'non detecte'} | "
                 f"severite: {problem.severity or 'non detectee'} | "
+                f"priorite: {problem.escalation_priority or 'n/a'} | "
+                f"niveau: {problem.escalation_level or 'n/a'} | "
+                f"responsable: {problem.escalation_owner or 'non assigne'} | "
                 f"age: {problem.age_label} | action: {problem.recommended_action}"
             )
             for problem in report.open_problems[:10]
@@ -538,11 +546,53 @@ class ReportService:
             return f"{hours}h {minutes}m"
         return f"{minutes}m"
 
-    @staticmethod
-    def _recommended_action(event: Event) -> str:
+    @classmethod
+    def _recommended_action(cls, event: Event) -> str:
         severity = (event.severity or "").lower()
+        owner = event.escalation_owner or cls._event_escalation_owner(event)
+        level = event.escalation_level or cls._event_escalation_level(event)
         if severity in {"disaster", "high"}:
-            return "Escalader immediatement vers l'equipe d'astreinte."
-        if severity in {"average", "warning"}:
-            return "Verifier l'equipement et suivre la resolution."
+            return f"Escalader immediatement vers {owner} ({level}) et confirmer l'impact."
+        if severity == "average":
+            return f"Affecter a {owner} ({level}), verifier l'equipement et suivre la resolution."
+        if severity == "warning":
+            return f"Surveiller avec {owner} ({level}) et confirmer si l'alerte persiste."
         return "Qualifier l'alerte et confirmer le statut terrain."
+
+    @staticmethod
+    def _event_escalation_priority(event: Event) -> int | None:
+        if event.escalation_priority is not None:
+            return event.escalation_priority
+        severity = (event.severity or "").lower()
+        fallback = {
+            "disaster": 100,
+            "high": 90,
+            "average": 70,
+            "warning": 50,
+            "information": 25,
+            "not_classified": 10,
+        }
+        return fallback.get(severity)
+
+    @classmethod
+    def _event_escalation_level(cls, event: Event) -> str:
+        priority = cls._event_escalation_priority(event) or 10
+        if priority >= 95:
+            return "P1"
+        if priority >= 75:
+            return "P2"
+        if priority >= 50:
+            return "P3"
+        return "P4"
+
+    @staticmethod
+    def _event_escalation_owner(event: Event) -> str:
+        severity = (event.severity or "").lower()
+        owners = {
+            "disaster": "Incident Manager",
+            "high": "NOC Lead",
+            "average": "NOC Operator",
+            "warning": "NOC Operator",
+            "information": "Monitoring Team",
+        }
+        return owners.get(severity, "NOC Team")
