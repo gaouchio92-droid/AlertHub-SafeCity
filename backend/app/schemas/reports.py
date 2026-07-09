@@ -43,6 +43,24 @@ class WeeklyDiscordReportEventResponse(BaseModel):
     links: list[str]
 
 
+class WeeklyDiscordOpenProblemResponse(BaseModel):
+    """Detailed unresolved problem row for operational reports."""
+
+    model_config = ConfigDict(frozen=True)
+
+    problem_id: str | None
+    title: str
+    host: str | None
+    severity: str | None
+    status: str | None
+    started_at: datetime | None
+    age_seconds: int | None
+    age_label: str
+    operational_data: str | None
+    links: list[str]
+    recommended_action: str
+
+
 class WeeklyDiscordReportDataQualityResponse(BaseModel):
     """Data quality counters for the weekly report."""
 
@@ -80,4 +98,5 @@ class WeeklyDiscordReportResponse(BaseModel):
     by_severity: list[WeeklyDiscordReportMetricResponse]
     by_host: list[WeeklyDiscordReportMetricResponse]
     daily_trend: list[WeeklyDiscordReportDailyTrendResponse]
+    open_problems: list[WeeklyDiscordOpenProblemResponse]
     recent_events: list[WeeklyDiscordReportEventResponse]

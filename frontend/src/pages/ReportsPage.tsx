@@ -15,6 +15,7 @@ import {
   WeeklyDiscordReport,
   WeeklyDiscordReportDailyTrend,
   WeeklyDiscordReportMetric,
+  WeeklyDiscordOpenProblem,
   WeeklyDiscordReportStatus,
   getConnectorDiagnostics,
   getWeeklyDiscordReport,
@@ -178,6 +179,8 @@ export function ReportsPage() {
 
       <StabilizationRecommendationsPanel report={report} />
 
+      <OpenProblemsPanel items={report?.open_problems ?? []} />
+
       <section className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
         <DiscordReachabilityPanel report={report} diagnostic={discordDiagnostic} />
         <div className="grid gap-4 md:grid-cols-2">
@@ -291,6 +294,102 @@ function MetricCard({ label, value }: { label: string; value: number }) {
     <div className="rounded-md border border-white/10 bg-slate-950/60 p-4">
       <p className="text-sm text-slate-400">{label}</p>
       <p className="mt-2 text-3xl font-semibold text-white">{value}</p>
+    </div>
+  );
+}
+
+function OpenProblemsPanel({ items }: { items: WeeklyDiscordOpenProblem[] }) {
+  const { t } = useI18n();
+
+  return (
+    <section className="rounded-md border border-rose-300/25 bg-rose-300/[0.06] p-6">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="h-5 w-5 text-rose-200" aria-hidden="true" />
+            <h3 className="text-lg font-semibold text-white">{t.reports.unresolvedTitle}</h3>
+          </div>
+          <p className="mt-2 text-sm leading-6 text-slate-300">
+            {t.reports.unresolvedSubtitle}
+          </p>
+        </div>
+        <span className="inline-flex w-fit rounded-md bg-rose-400/10 px-3 py-1.5 text-sm font-semibold text-rose-100 ring-1 ring-rose-300/25">
+          {items.length}
+        </span>
+      </div>
+
+      <div className="mt-5 grid gap-4 xl:grid-cols-2">
+        {items.map((problem) => (
+          <article
+            key={`${problem.problem_id ?? problem.title}-${problem.started_at ?? 'unknown'}`}
+            className="rounded-md border border-white/10 bg-slate-950/70 p-4"
+          >
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-white">{problem.title}</p>
+                <p className="mt-1 text-xs text-slate-500">
+                  {problem.problem_id ? `ID ${problem.problem_id}` : t.reports.unknown}
+                </p>
+              </div>
+              <span className="inline-flex w-fit rounded-md bg-amber-400/10 px-2.5 py-1 text-xs font-semibold text-amber-100 ring-1 ring-amber-300/20">
+                {problem.severity ?? t.reports.notDetected}
+              </span>
+            </div>
+
+            <div className="mt-4 grid gap-3 sm:grid-cols-3">
+              <ProblemDetail label={t.reports.host} value={problem.host ?? t.reports.notDetected} />
+              <ProblemDetail label={t.reports.age} value={problem.age_label} />
+              <ProblemDetail label={t.reports.status} value={problem.status ?? t.reports.unknown} />
+            </div>
+
+            {problem.operational_data ? (
+              <div className="mt-4 rounded-md border border-white/10 bg-white/[0.03] p-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  {t.reports.operationalData}
+                </p>
+                <p className="mt-2 text-sm leading-6 text-slate-300">
+                  {problem.operational_data}
+                </p>
+              </div>
+            ) : null}
+
+            <div className="mt-4 rounded-md border border-white/10 bg-white/[0.03] p-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                {t.reports.action}
+              </p>
+              <p className="mt-2 text-sm leading-6 text-slate-200">
+                {problem.recommended_action}
+              </p>
+            </div>
+
+            {problem.links.length > 0 ? (
+              <a
+                href={problem.links[0]}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-4 inline-flex items-center rounded-md bg-cyan-400 px-3 py-2 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300"
+              >
+                {t.reports.viewProblem}
+              </a>
+            ) : null}
+          </article>
+        ))}
+      </div>
+
+      {items.length === 0 ? (
+        <p className="mt-4 rounded-md border border-white/10 bg-slate-950/60 p-4 text-sm text-slate-300">
+          {t.reports.noUnresolved}
+        </p>
+      ) : null}
+    </section>
+  );
+}
+
+function ProblemDetail({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-md border border-white/10 bg-white/[0.03] p-3">
+      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</p>
+      <p className="mt-2 break-words text-sm font-medium text-white">{value}</p>
     </div>
   );
 }

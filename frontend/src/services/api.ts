@@ -84,6 +84,20 @@ export type WeeklyDiscordReportEvent = {
   links: string[];
 };
 
+export type WeeklyDiscordOpenProblem = {
+  problem_id: string | null;
+  title: string;
+  host: string | null;
+  severity: string | null;
+  status: string | null;
+  started_at: string | null;
+  age_seconds: number | null;
+  age_label: string;
+  operational_data: string | null;
+  links: string[];
+  recommended_action: string;
+};
+
 export type WeeklyDiscordReportDataQuality = {
   unnamed_events: number;
   unknown_severity_events: number;
@@ -109,6 +123,7 @@ export type WeeklyDiscordReport = {
   by_severity: WeeklyDiscordReportMetric[];
   by_host: WeeklyDiscordReportMetric[];
   daily_trend: WeeklyDiscordReportDailyTrend[];
+  open_problems: WeeklyDiscordOpenProblem[];
   recent_events: WeeklyDiscordReportEvent[];
 };
 

@@ -206,6 +206,9 @@ def build_weekly_discord_pdf(
             _section_title("Qualite des donnees", styles),
             _quality_table(report),
             Spacer(1, 18),
+            _section_title("Problemes non resolus prioritaires", styles),
+            _open_problems_table(report),
+            Spacer(1, 18),
             _section_title("Derniers evenements significatifs", styles),
             _events_table(report),
             PageBreak(),
@@ -389,6 +392,25 @@ def _events_table(report: WeeklyDiscordReportResponse) -> Table:
     if len(rows) == 1:
         rows.append(["Aucun evenement recent", "-", "-", "-"])
     table = Table(rows, colWidths=[7.5 * cm, 4 * cm, 3 * cm, 2.5 * cm])
+    table.setStyle(_table_style())
+    return table
+
+
+def _open_problems_table(report: WeeklyDiscordReportResponse) -> Table:
+    rows = [["Probleme", "Host", "Severite", "Age", "Action"]]
+    for problem in report.open_problems[:10]:
+        rows.append(
+            [
+                _truncate(problem.title, 42),
+                problem.host or "Non detecte",
+                problem.severity or "Non detectee",
+                problem.age_label,
+                _truncate(problem.recommended_action, 42),
+            ]
+        )
+    if len(rows) == 1:
+        rows.append(["Aucun probleme non resolu", "-", "-", "-", "-"])
+    table = Table(rows, colWidths=[5.2 * cm, 3.2 * cm, 2.2 * cm, 2 * cm, 4.4 * cm])
     table.setStyle(_table_style())
     return table
 

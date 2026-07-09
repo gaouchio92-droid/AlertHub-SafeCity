@@ -8,6 +8,7 @@ from sqlalchemy.sql.elements import ColumnElement
 
 from app.models.event import Event
 from app.schemas.reports import (
+    WeeklyDiscordOpenProblemResponse,
     WeeklyDiscordReportDailyTrendResponse,
     WeeklyDiscordReportDataQualityResponse,
     WeeklyDiscordReportEventResponse,
@@ -40,13 +41,18 @@ class ReportService:
         total_events = self._db.scalar(
             select(func.count()).select_from(Event).where(*all_discord_filters)
         ) or 0
-        readable_events = self._db.scalar(
-            select(func.count()).select_from(Event).where(*readable_filters)
-        ) or 0
         resolved_events = self._db.scalar(
             select(func.count())
             .select_from(Event)
             .where(*readable_filters, Event.resolved_at.is_not(None))
+        ) or 0
+        open_problem_filters: tuple[ColumnElement[bool], ...] = (
+            *readable_filters,
+            Event.resolved_at.is_(None),
+            Event.status != "resolved",
+        )
+        open_events = self._db.scalar(
+            select(func.count()).select_from(Event).where(*open_problem_filters)
         ) or 0
         unnamed_events = self._count_missing(Event.problem_name, all_discord_filters)
         unknown_severity_events = self._count_missing(Event.severity, all_discord_filters)
@@ -57,7 +63,7 @@ class ReportService:
             period_start=period_start,
             period_end=period_end,
             total_events=total_events,
-            open_events=max(readable_events - resolved_events, 0),
+            open_events=open_events,
             resolved_events=resolved_events,
             data_quality=self._data_quality(
                 unnamed_events=unnamed_events,
@@ -71,6 +77,7 @@ class ReportService:
                 period_end.date(),
                 all_discord_filters,
             ),
+            open_problems=self._open_problems(open_problem_filters, period_end),
             recent_events=self._recent_events(readable_filters),
         )
 
@@ -108,6 +115,10 @@ class ReportService:
             "## Derniers evenements significatifs",
             "",
             *self._event_lines(report),
+            "",
+            "## Problemes non resolus",
+            "",
+            *self._open_problem_lines(report),
             "",
             "## Recommandations de stabilisation",
             "",
@@ -219,6 +230,37 @@ class ReportService:
             for event in events
         ]
 
+    def _open_problems(
+        self,
+        base_filters: tuple[ColumnElement[bool], ...],
+        period_end: datetime,
+    ) -> list[WeeklyDiscordOpenProblemResponse]:
+        events = self._db.scalars(
+            select(Event)
+            .where(*base_filters)
+            .order_by(
+                Event.started_at.asc().nullslast(),
+                Event.created_at.asc(),
+            )
+            .limit(20)
+        ).all()
+        return [
+            WeeklyDiscordOpenProblemResponse(
+                problem_id=event.problem_id,
+                title=self._event_title(event),
+                host=event.host,
+                severity=event.severity,
+                status=event.status,
+                started_at=event.started_at,
+                age_seconds=self._age_seconds(event.started_at, period_end),
+                age_label=self._age_label(event.started_at, period_end),
+                operational_data=self._normalized_value(event, "operational_data"),
+                links=self._normalized_links(event),
+                recommended_action=self._recommended_action(event),
+            )
+            for event in events
+        ]
+
     def _management_findings(
         self,
         report: WeeklyDiscordReportResponse,
@@ -260,6 +302,21 @@ class ReportService:
                 f"statut: {event.status or 'unknown'}"
             )
             for event in report.recent_events[:8]
+        ]
+
+    def _open_problem_lines(
+        self,
+        report: WeeklyDiscordReportResponse,
+    ) -> list[str]:
+        if not report.open_problems:
+            return ["- Aucun probleme non resolu detecte."]
+        return [
+            (
+                f"- {problem.title} | host: {problem.host or 'non detecte'} | "
+                f"severite: {problem.severity or 'non detectee'} | "
+                f"age: {problem.age_label} | action: {problem.recommended_action}"
+            )
+            for problem in report.open_problems[:10]
         ]
 
     def _stabilization_recommendations(
@@ -358,3 +415,32 @@ class ReportService:
         if not isinstance(links, list):
             return []
         return [str(link) for link in links if link]
+
+    @staticmethod
+    def _age_seconds(started_at: datetime | None, period_end: datetime) -> int | None:
+        if not started_at:
+            return None
+        return max(int((period_end - started_at).total_seconds()), 0)
+
+    @classmethod
+    def _age_label(cls, started_at: datetime | None, period_end: datetime) -> str:
+        age_seconds = cls._age_seconds(started_at, period_end)
+        if age_seconds is None:
+            return "age inconnu"
+        days, remainder = divmod(age_seconds, 86_400)
+        hours, remainder = divmod(remainder, 3_600)
+        minutes = remainder // 60
+        if days:
+            return f"{days}j {hours}h"
+        if hours:
+            return f"{hours}h {minutes}m"
+        return f"{minutes}m"
+
+    @staticmethod
+    def _recommended_action(event: Event) -> str:
+        severity = (event.severity or "").lower()
+        if severity in {"disaster", "high"}:
+            return "Escalader immediatement vers l'equipe d'astreinte."
+        if severity in {"average", "warning"}:
+            return "Verifier l'equipement et suivre la resolution."
+        return "Qualifier l'alerte et confirmer le statut terrain."
