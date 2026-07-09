@@ -55,6 +55,7 @@ class Settings(BaseSettings):
     jwt_expire_minutes: int = 60
 
     log_level: str = "INFO"
+    sync_interval_seconds: int = Field(default=300, ge=60)
 
     @model_validator(mode="after")
     def validate_production_secrets(self) -> "Settings":

@@ -13,6 +13,8 @@ Discord remains the default source. Zabbix API and Zabbix Database integrations 
 - Runtime: Docker and Docker Compose
 
 See [docs/architecture.md](docs/architecture.md) for the system layout.
+See [docs/operations.md](docs/operations.md) for backups, scheduled sync, log rotation, health
+monitoring, migrations, and escalation procedures.
 
 ## Installation
 
@@ -34,6 +36,12 @@ Start the full stack:
 docker compose up --build
 ```
 
+Run database migrations before deployment:
+
+```bash
+docker compose --profile migration run --rm migrations
+```
+
 Open the application:
 
 - Frontend: http://localhost
@@ -46,6 +54,13 @@ Stop services:
 ```bash
 docker compose down
 ```
+
+Operational background services included in Compose:
+
+- `scheduler`: synchronizes enabled connectors on `SYNC_INTERVAL_SECONDS`.
+- `postgres_backup`: writes PostgreSQL dumps to the `postgres_backups` volume.
+- `health_monitor`: checks `/api/v1/health` through Nginx.
+- Docker log rotation is enabled through `DOCKER_LOG_MAX_SIZE` and `DOCKER_LOG_MAX_FILE`.
 
 Remove the PostgreSQL volume when you intentionally want a clean database:
 

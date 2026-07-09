@@ -1,3 +1,9 @@
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: ${DOCKER_LOG_MAX_SIZE:-10m}
+    max-file: ${DOCKER_LOG_MAX_FILE:-5}
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -9,6 +15,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    logging: *default-logging
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 10s
@@ -49,6 +56,7 @@ services:
       ZABBIX_DB_PASSWORD: ${ZABBIX_DB_PASSWORD:-}
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
       JWT_EXPIRE_MINUTES: ${JWT_EXPIRE_MINUTES:-60}
+      SYNC_INTERVAL_SECONDS: ${SYNC_INTERVAL_SECONDS:-300}
     depends_on:
       postgres:
         condition: service_healthy
@@ -60,6 +68,134 @@ services:
       start_period: 20s
     networks:
       - alerthub_network
+    logging: *default-logging
+
+  scheduler:
+    build:
+      context: ./backend
+    container_name: alerthub_scheduler
+    restart: unless-stopped
+    command: ["python", "-m", "app.jobs.sync_scheduler"]
+    environment:
+      APP_NAME: ${APP_NAME:-AlertHub Safe City}
+      APP_ENV: ${APP_ENV:-development}
+      SECRET_KEY: ${SECRET_KEY:?SECRET_KEY is required}
+      POSTGRES_HOST: postgres
+      POSTGRES_DB: ${POSTGRES_DB:-alerthub}
+      POSTGRES_USER: ${POSTGRES_USER:-alerthub}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      EVENT_SOURCE: ${EVENT_SOURCE:-discord}
+      CONNECTOR_IMPORTS: ${CONNECTOR_IMPORTS:-}
+      ENABLE_DISCORD: ${ENABLE_DISCORD:-true}
+      ENABLE_ZABBIX_API: ${ENABLE_ZABBIX_API:-false}
+      ENABLE_ZABBIX_DB: ${ENABLE_ZABBIX_DB:-false}
+      DISCORD_TOKEN: ${DISCORD_TOKEN:-}
+      DISCORD_GUILD_ID: ${DISCORD_GUILD_ID:-}
+      DISCORD_CHANNEL_ID: ${DISCORD_CHANNEL_ID:-}
+      ZABBIX_API_URL: ${ZABBIX_API_URL:-}
+      ZABBIX_USERNAME: ${ZABBIX_USERNAME:-}
+      ZABBIX_PASSWORD: ${ZABBIX_PASSWORD:-}
+      ZABBIX_DB_HOST: ${ZABBIX_DB_HOST:-}
+      ZABBIX_DB_PORT: ${ZABBIX_DB_PORT:-5432}
+      ZABBIX_DB_NAME: ${ZABBIX_DB_NAME:-}
+      ZABBIX_DB_USER: ${ZABBIX_DB_USER:-}
+      ZABBIX_DB_PASSWORD: ${ZABBIX_DB_PASSWORD:-}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      JWT_EXPIRE_MINUTES: ${JWT_EXPIRE_MINUTES:-60}
+      SYNC_INTERVAL_SECONDS: ${SYNC_INTERVAL_SECONDS:-300}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      disable: true
+    networks:
+      - alerthub_network
+    logging: *default-logging
+
+  migrations:
+    build:
+      context: ./backend
+    container_name: alerthub_migrations
+    profiles: ["migration"]
+    restart: "no"
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      SECRET_KEY: ${SECRET_KEY:?SECRET_KEY is required}
+      POSTGRES_HOST: postgres
+      POSTGRES_DB: ${POSTGRES_DB:-alerthub}
+      POSTGRES_USER: ${POSTGRES_USER:-alerthub}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      disable: true
+    networks:
+      - alerthub_network
+    logging: *default-logging
+
+  postgres_backup:
+    image: postgres:16-alpine
+    container_name: alerthub_postgres_backup
+    restart: unless-stopped
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_DB: ${POSTGRES_DB:-alerthub}
+      POSTGRES_USER: ${POSTGRES_USER:-alerthub}
+      PGPASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      BACKUP_INTERVAL_SECONDS: ${POSTGRES_BACKUP_INTERVAL_SECONDS:-86400}
+      BACKUP_RETENTION_DAYS: ${POSTGRES_BACKUP_RETENTION_DAYS:-14}
+    command:
+      - /bin/sh
+      - -c
+      - |
+        set -eu
+        while true; do
+          timestamp=$$(date -u +%Y%m%dT%H%M%SZ)
+          target="/backups/alerthub-$${timestamp}.dump"
+          pg_dump -h "$${POSTGRES_HOST}" -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}" -F c -f "$${target}"
+          echo "$$(date -u +%Y-%m-%dT%H:%M:%SZ) backup created: $${target}"
+          find /backups -type f -name "alerthub-*.dump" -mtime +"$${BACKUP_RETENTION_DAYS}" -delete
+          sleep "$${BACKUP_INTERVAL_SECONDS}"
+        done
+    volumes:
+      - postgres_backups:/backups
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - alerthub_network
+    logging: *default-logging
+
+  health_monitor:
+    image: alpine:3.20
+    container_name: alerthub_health_monitor
+    restart: unless-stopped
+    environment:
+      HEALTHCHECK_URL: http://nginx/api/v1/health
+      HEALTHCHECK_INTERVAL_SECONDS: ${HEALTHCHECK_INTERVAL_SECONDS:-60}
+    command:
+      - /bin/sh
+      - -c
+      - |
+        set -eu
+        while true; do
+          if wget -qO- "$${HEALTHCHECK_URL}" >/dev/null; then
+            echo "$$(date -u +%Y-%m-%dT%H:%M:%SZ) healthcheck ok"
+          else
+            echo "$$(date -u +%Y-%m-%dT%H:%M:%SZ) healthcheck failed" >&2
+          fi
+          sleep "$${HEALTHCHECK_INTERVAL_SECONDS}"
+        done
+    depends_on:
+      nginx:
+        condition: service_healthy
+    networks:
+      - alerthub_network
+    logging: *default-logging
 
   frontend:
     build:
@@ -77,6 +213,7 @@ services:
       start_period: 10s
     networks:
       - alerthub_network
+    logging: *default-logging
 
   nginx:
     image: nginx:1.27-alpine
@@ -99,9 +236,11 @@ services:
       start_period: 10s
     networks:
       - alerthub_network
+    logging: *default-logging
 
 volumes:
   postgres_data:
+  postgres_backups:
 
 networks:
   alerthub_network:
