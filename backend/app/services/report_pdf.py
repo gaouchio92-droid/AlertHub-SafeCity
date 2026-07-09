@@ -7,7 +7,7 @@ from typing import Any
 
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_CENTER, TA_LEFT
-from reportlab.lib.pagesizes import A4
+from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import cm
 from reportlab.platypus import (
@@ -34,6 +34,7 @@ EMERALD = colors.HexColor("#10B981")
 ROSE = colors.HexColor("#F43F5E")
 AMBER = colors.HexColor("#F59E0B")
 INDIGO = colors.HexColor("#6366F1")
+CONTENT_WIDTH = 26.9 * cm
 
 
 class BarChart(Flowable):  # type: ignore[misc]
@@ -149,7 +150,7 @@ def build_weekly_discord_pdf(
     buffer = BytesIO()
     document = SimpleDocTemplate(
         buffer,
-        pagesize=A4,
+        pagesize=landscape(A4),
         rightMargin=1.4 * cm,
         leftMargin=1.4 * cm,
         topMargin=1.2 * cm,
@@ -193,18 +194,13 @@ def build_weekly_discord_pdf(
             *_bullet_list(findings, styles),
             Spacer(1, 12),
             _section_title("Tendance quotidienne", styles),
-            DailyTrendChart(report, width=17.5 * cm),
-            Spacer(1, 8),
-            _legend(),
+            DailyTrendChart(report, width=CONTENT_WIDTH),
             PageBreak(),
             _section_title("Equipements les plus impactes", styles),
-            BarChart(report.by_host, width=17.5 * cm, bar_color=PRIMARY),
+            BarChart(report.by_host, width=CONTENT_WIDTH, bar_color=PRIMARY),
             Spacer(1, 18),
             _section_title("Repartition par severite", styles),
-            BarChart(report.by_severity, width=17.5 * cm, bar_color=AMBER),
-            Spacer(1, 18),
-            _section_title("Qualite des donnees", styles),
-            _quality_table(report),
+            BarChart(report.by_severity, width=CONTENT_WIDTH, bar_color=AMBER),
             Spacer(1, 18),
             _section_title("Problemes non resolus prioritaires", styles),
             _open_problems_table(report),
@@ -300,13 +296,31 @@ def _styles() -> dict[str, ParagraphStyle]:
             textColor=colors.white,
             alignment=TA_CENTER,
         ),
+        "TableCell": ParagraphStyle(
+            "TableCell",
+            parent=base["BodyText"],
+            fontName="Helvetica",
+            fontSize=7.5,
+            leading=10,
+            textColor=colors.black,
+            wordWrap="CJK",
+        ),
+        "TableHeader": ParagraphStyle(
+            "TableHeader",
+            parent=base["BodyText"],
+            fontName="Helvetica-Bold",
+            fontSize=8,
+            leading=10,
+            textColor=colors.white,
+            wordWrap="CJK",
+        ),
     }
 
 
 def _cover_header(styles: dict[str, ParagraphStyle]) -> Table:
     return Table(
         [[Paragraph("ALERTHUB", styles["CardLabel"]), Paragraph("Safe City", styles["Body"])]],
-        colWidths=[3.2 * cm, 13.8 * cm],
+        colWidths=[4.2 * cm, CONTENT_WIDTH - 4.2 * cm],
         rowHeights=[1.1 * cm],
         style=[
             ("BACKGROUND", (0, 0), (0, 0), DARK),
@@ -328,7 +342,7 @@ def _kpi_grid(items: list[tuple[str, int, Any]]) -> Table:
     ]
     table = Table(
         [[Table([[cell[0]], [cell[1]]], rowHeights=[0.65 * cm, 0.45 * cm]) for cell in cells]],
-        colWidths=[4.25 * cm] * 4,
+        colWidths=[CONTENT_WIDTH / 4] * 4,
     )
     style: list[tuple[object, ...]] = [
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
@@ -348,7 +362,7 @@ def _section_title(title: str, styles: dict[str, ParagraphStyle]) -> KeepTogethe
             Paragraph(title, styles["Heading"]),
             Table(
                 [[""]],
-                colWidths=[17.5 * cm],
+                colWidths=[CONTENT_WIDTH],
                 rowHeights=[0.05 * cm],
                 style=[("BACKGROUND", (0, 0), (-1, -1), PRIMARY)],
             ),
@@ -364,53 +378,73 @@ def _bullet_list(items: list[str], styles: dict[str, ParagraphStyle]) -> list[Pa
     ]
 
 
-def _quality_table(report: WeeklyDiscordReportResponse) -> Table:
-    table = Table(
-        [
-            ["Indicateur", "Volume"],
-            ["Messages sans titre", str(report.data_quality.unnamed_events)],
-            ["Messages sans severite", str(report.data_quality.unknown_severity_events)],
-            ["Messages sans host", str(report.data_quality.unknown_host_events)],
-        ],
-        colWidths=[12 * cm, 5 * cm],
-    )
-    table.setStyle(_table_style())
-    return table
-
-
 def _events_table(report: WeeklyDiscordReportResponse) -> Table:
-    rows = [["Evenement", "Host", "Severite", "Statut"]]
+    styles = _styles()
+    rows = [
+        [
+            _th("Evenement", styles),
+            _th("Host", styles),
+            _th("Severite", styles),
+            _th("Statut", styles),
+        ]
+    ]
     for event in report.recent_events[:8]:
         rows.append(
             [
-                _truncate(event.title, 55),
-                event.host or "Non detecte",
-                event.severity or "Non detectee",
-                event.status or "unknown",
+                _td(event.title, styles),
+                _td(event.host or "Non detecte", styles),
+                _td(event.severity or "Non detectee", styles),
+                _td(event.status or "unknown", styles),
             ]
         )
     if len(rows) == 1:
-        rows.append(["Aucun evenement recent", "-", "-", "-"])
-    table = Table(rows, colWidths=[7.5 * cm, 4 * cm, 3 * cm, 2.5 * cm])
+        rows.append(
+            [
+                _td("Aucun evenement recent", styles),
+                _td("-", styles),
+                _td("-", styles),
+                _td("-", styles),
+            ]
+        )
+    table = Table(rows, colWidths=[14 * cm, 6 * cm, 3.5 * cm, 3.4 * cm], repeatRows=1)
     table.setStyle(_table_style())
     return table
 
 
 def _open_problems_table(report: WeeklyDiscordReportResponse) -> Table:
-    rows = [["Probleme", "Host", "Severite", "Age", "Action"]]
+    styles = _styles()
+    rows = [
+        [
+            _th("Probleme", styles),
+            _th("Host", styles),
+            _th("Severite", styles),
+            _th("Age", styles),
+            _th("Action conseillee", styles),
+        ]
+    ]
     for problem in report.open_problems[:10]:
         rows.append(
             [
-                _truncate(problem.title, 42),
-                problem.host or "Non detecte",
-                problem.severity or "Non detectee",
-                problem.age_label,
-                _truncate(problem.recommended_action, 42),
+                _td(problem.title, styles),
+                _td(problem.host or "Non detecte", styles),
+                _td(problem.severity or "Non detectee", styles),
+                _td(problem.age_label, styles),
+                _td(problem.recommended_action, styles),
             ]
         )
     if len(rows) == 1:
-        rows.append(["Aucun probleme non resolu", "-", "-", "-", "-"])
-    table = Table(rows, colWidths=[5.2 * cm, 3.2 * cm, 2.2 * cm, 2 * cm, 4.4 * cm])
+        rows.append([
+            _td("Aucun probleme non resolu", styles),
+            _td("-", styles),
+            _td("-", styles),
+            _td("-", styles),
+            _td("-", styles),
+        ])
+    table = Table(
+        rows,
+        colWidths=[10.2 * cm, 5.2 * cm, 3 * cm, 2.4 * cm, 6.1 * cm],
+        repeatRows=1,
+    )
     table.setStyle(_table_style())
     return table
 
@@ -423,7 +457,7 @@ def _recommendation_cards(
         [Paragraph(recommendation.removeprefix("- ").strip(), styles["Body"])]
         for recommendation in recommendations
     ]
-    table = Table(rows, colWidths=[17 * cm])
+    table = Table(rows, colWidths=[CONTENT_WIDTH])
     table.setStyle(
         TableStyle(
             [
@@ -483,7 +517,7 @@ def _draw_footer(canvas: Any, document: Any) -> None:
     canvas_obj.setFillColor(MUTED)
     canvas_obj.setFont("Helvetica", 8)
     canvas_obj.drawString(1.4 * cm, 0.7 * cm, "AlertHub Safe City")
-    canvas_obj.drawRightString(19.6 * cm, 0.7 * cm, f"Page {doc.page}")
+    canvas_obj.drawRightString(28.3 * cm, 0.7 * cm, f"Page {doc.page}")
     canvas_obj.restoreState()
 
 
@@ -491,3 +525,19 @@ def _truncate(value: str, max_length: int) -> str:
     if len(value) <= max_length:
         return value
     return f"{value[: max_length - 3]}..."
+
+
+def _th(value: str, styles: dict[str, ParagraphStyle]) -> Paragraph:
+    return Paragraph(_escape_for_pdf(value), styles["TableHeader"])
+
+
+def _td(value: str, styles: dict[str, ParagraphStyle]) -> Paragraph:
+    return Paragraph(_escape_for_pdf(value), styles["TableCell"])
+
+
+def _escape_for_pdf(value: str) -> str:
+    return (
+        value.replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+    )
