@@ -47,6 +47,7 @@ services:
       DISCORD_GUILD_ID: ${DISCORD_GUILD_ID:-}
       DISCORD_CHANNEL_ID: ${DISCORD_CHANNEL_ID:-}
       ZABBIX_API_URL: ${ZABBIX_API_URL:-}
+      ZABBIX_WEB_URL: ${ZABBIX_WEB_URL:-}
       ZABBIX_USERNAME: ${ZABBIX_USERNAME:-}
       ZABBIX_PASSWORD: ${ZABBIX_PASSWORD:-}
       ZABBIX_DB_HOST: ${ZABBIX_DB_HOST:-}
@@ -69,6 +70,8 @@ services:
     depends_on:
       migrations:
         condition: service_completed_successfully
+    volumes:
+      - ./.env:/app/.env
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health', timeout=5).read()"]
       interval: 30s
@@ -103,6 +106,7 @@ services:
       DISCORD_GUILD_ID: ${DISCORD_GUILD_ID:-}
       DISCORD_CHANNEL_ID: ${DISCORD_CHANNEL_ID:-}
       ZABBIX_API_URL: ${ZABBIX_API_URL:-}
+      ZABBIX_WEB_URL: ${ZABBIX_WEB_URL:-}
       ZABBIX_USERNAME: ${ZABBIX_USERNAME:-}
       ZABBIX_PASSWORD: ${ZABBIX_PASSWORD:-}
       ZABBIX_DB_HOST: ${ZABBIX_DB_HOST:-}

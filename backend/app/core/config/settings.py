@@ -42,6 +42,7 @@ class Settings(BaseSettings):
     discord_channel_id: str = ""
 
     zabbix_api_url: str = ""
+    zabbix_web_url: str = ""
     zabbix_username: str = ""
     zabbix_password: str = ""
 

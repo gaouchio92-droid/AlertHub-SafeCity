@@ -81,6 +81,19 @@ export type ConnectorConfigurationGuideItem = {
   note: string;
 };
 
+export type ConnectorEnvironmentValue = {
+  key: string;
+  value: string;
+  secret: boolean;
+  configured: boolean;
+};
+
+export type ConnectorEnvironment = {
+  values: ConnectorEnvironmentValue[];
+  restart_required: boolean;
+  apply_command: string;
+};
+
 export type WeeklyDiscordReportStatus = {
   feature: string;
   implemented: boolean;
@@ -288,6 +301,20 @@ export async function getConnectorConfigurationGuide(): Promise<ConnectorConfigu
   const response = await apiClient.get<ConnectorConfigurationGuideItem[]>(
     '/connectors/configuration-guide',
   );
+  return response.data;
+}
+
+export async function getConnectorEnvironment(): Promise<ConnectorEnvironment> {
+  const response = await apiClient.get<ConnectorEnvironment>('/connectors/environment');
+  return response.data;
+}
+
+export async function updateConnectorEnvironment(
+  values: Record<string, string>,
+): Promise<ConnectorEnvironment> {
+  const response = await apiClient.put<ConnectorEnvironment>('/connectors/environment', {
+    values,
+  });
   return response.data;
 }
 

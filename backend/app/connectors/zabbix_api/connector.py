@@ -2,6 +2,7 @@
 
 from datetime import UTC, datetime
 from typing import Any
+from urllib.parse import urlparse
 
 import httpx
 
@@ -10,6 +11,15 @@ from app.core.config.settings import Settings
 from app.core.logging import get_logger
 
 logger = get_logger(__name__)
+
+SEVERITY_NAMES = {
+    "0": "not_classified",
+    "1": "information",
+    "2": "warning",
+    "3": "average",
+    "4": "high",
+    "5": "disaster",
+}
 
 
 class ZabbixApiConnector(BaseConnector):
@@ -74,18 +84,40 @@ class ZabbixApiConnector(BaseConnector):
         if not self.enabled or not self.connected:
             return []
 
-        params: dict[str, Any] = {
+        problem_params: dict[str, Any] = {
             "output": "extend",
-            "selectHosts": ["host", "name"],
+            "selectAcknowledges": "extend",
+            "selectHosts": ["hostid", "host", "name"],
+            "selectTags": "extend",
+            "recent": "true",
+            "sortfield": ["eventid"],
+            "sortorder": "DESC",
+            "limit": 100,
+        }
+        event_params: dict[str, Any] = {
+            "output": "extend",
+            "selectHosts": ["hostid", "host", "name"],
+            "selectRelatedObject": "extend",
+            "select_acknowledges": "extend",
             "sortfield": ["clock", "eventid"],
             "sortorder": "ASC",
             "limit": 100,
         }
         if self._last_event_clock is not None:
-            params["time_from"] = self._last_event_clock + 1
+            event_params["time_from"] = self._last_event_clock + 1
 
-        events = await self.event_get(params)
-        normalized_events = [event for event in events if isinstance(event, dict)]
+        problems = await self.problem_get(problem_params)
+        events = await self.event_get(event_params)
+        normalized_events = [
+            {**event, "zabbix_payload_type": "event"}
+            for event in events
+            if isinstance(event, dict)
+        ]
+        normalized_events.extend(
+            {**problem, "zabbix_payload_type": "problem"}
+            for problem in problems
+            if isinstance(problem, dict)
+        )
         clocks = [
             int(event["clock"])
             for event in normalized_events
@@ -109,18 +141,49 @@ class ZabbixApiConnector(BaseConnector):
         )
         hosts = payload.get("hosts") if isinstance(payload.get("hosts"), list) else []
         first_host = hosts[0] if hosts and isinstance(hosts[0], dict) else {}
+        related_object = (
+            payload.get("relatedObject")
+            if isinstance(payload.get("relatedObject"), dict)
+            else {}
+        )
+        problem_id = str(payload.get("eventid")) if payload.get("eventid") else None
+        status = self._normalized_status(payload)
+        severity = self._normalized_severity(payload.get("severity"))
+        problem_name = str(
+            payload.get("name")
+            or related_object.get("description")
+            or related_object.get("name")
+            or ""
+        ).strip() or None
+        operational_data = self._operational_data(payload)
+        links = self._event_links(problem_id, payload)
 
         return ConnectorEvent(
             source=self.source,
-            problem_id=str(payload.get("eventid")) if payload.get("eventid") else None,
+            problem_id=problem_id,
             host=str(first_host.get("name") or first_host.get("host")) if first_host else None,
-            severity=str(payload.get("severity")) if payload.get("severity") is not None else None,
-            status=str(payload.get("value")) if payload.get("value") is not None else None,
-            problem_name=str(payload.get("name")) if payload.get("name") else None,
+            severity=severity,
+            status=status,
+            problem_name=problem_name,
             started_at=started_at,
-            resolved_at=None,
+            resolved_at=self._resolved_at(payload),
             duration=None,
-            raw_payload=payload,
+            raw_payload={
+                **payload,
+                "normalized": {
+                    "zabbix_problem_id": problem_id,
+                    "status": status,
+                    "host": str(first_host.get("name") or first_host.get("host"))
+                    if first_host
+                    else None,
+                    "severity": severity,
+                    "problem_name": problem_name,
+                    "operational_data": operational_data,
+                    "links": links,
+                    "zabbix_payload_type": payload.get("zabbix_payload_type"),
+                    "acknowledged": payload.get("acknowledged"),
+                },
+            },
         )
 
     async def event_get(self, params: dict[str, Any] | None = None) -> list[dict[str, Any]]:
@@ -170,3 +233,63 @@ class ZabbixApiConnector(BaseConnector):
         if "error" in payload:
             raise RuntimeError(f"Zabbix API error for {method}: {payload['error']}")
         return payload.get("result")
+
+    @staticmethod
+    def _normalized_severity(value: object) -> str | None:
+        if value is None:
+            return None
+        text = str(value).strip().lower()
+        return SEVERITY_NAMES.get(text, text.replace(" ", "_"))
+
+    @staticmethod
+    def _normalized_status(payload: dict[str, Any]) -> str:
+        if payload.get("zabbix_payload_type") == "problem":
+            return "problem"
+        if str(payload.get("value")) == "1":
+            return "problem"
+        if str(payload.get("value")) == "0":
+            return "resolved"
+        if payload.get("r_eventid") not in (None, "0", 0):
+            return "resolved"
+        return "received"
+
+    @staticmethod
+    def _resolved_at(payload: dict[str, Any]) -> datetime | None:
+        r_clock = payload.get("r_clock") or payload.get("rclock")
+        if r_clock is None or not str(r_clock).isdigit() or int(r_clock) <= 0:
+            return None
+        return datetime.fromtimestamp(int(r_clock), tz=UTC)
+
+    @staticmethod
+    def _operational_data(payload: dict[str, Any]) -> str | None:
+        for key in ("opdata", "operational_data", "description", "comments"):
+            value = payload.get(key)
+            if value:
+                return str(value)
+        related_object = payload.get("relatedObject")
+        if isinstance(related_object, dict) and related_object.get("opdata"):
+            return str(related_object["opdata"])
+        return None
+
+    def _event_links(self, problem_id: str | None, payload: dict[str, Any]) -> list[str]:
+        web_url = self._zabbix_web_url()
+        if not web_url:
+            return []
+        event_id = problem_id
+        trigger_id = payload.get("objectid") or payload.get("triggerid")
+        links: list[str] = []
+        if trigger_id and event_id:
+            links.append(f"{web_url}/tr_events.php?triggerid={trigger_id}&eventid={event_id}")
+        elif event_id:
+            links.append(f"{web_url}/zabbix.php?action=problem.view&eventids[]={event_id}")
+        return links
+
+    def _zabbix_web_url(self) -> str:
+        if self._settings.zabbix_web_url:
+            return self._settings.zabbix_web_url.rstrip("/")
+        if not self._settings.zabbix_api_url:
+            return ""
+        parsed = urlparse(self._settings.zabbix_api_url)
+        if not parsed.scheme or not parsed.netloc:
+            return ""
+        return f"{parsed.scheme}://{parsed.netloc}".rstrip("/")

@@ -91,3 +91,32 @@ class ConnectorConfigurationGuideItemResponse(BaseModel):
     apply_commands: list[str]
     restart_required: bool
     note: str
+
+
+class ConnectorEnvironmentValueResponse(BaseModel):
+    """Sanitized connector environment value."""
+
+    model_config = ConfigDict(from_attributes=True, frozen=True)
+
+    key: str
+    value: str
+    secret: bool
+    configured: bool
+
+
+class ConnectorEnvironmentResponse(BaseModel):
+    """Connector environment settings response."""
+
+    model_config = ConfigDict(frozen=True)
+
+    values: list[ConnectorEnvironmentValueResponse]
+    restart_required: bool
+    apply_command: str
+
+
+class ConnectorEnvironmentUpdateRequest(BaseModel):
+    """Connector environment update payload."""
+
+    model_config = ConfigDict(frozen=True)
+
+    values: dict[str, str]

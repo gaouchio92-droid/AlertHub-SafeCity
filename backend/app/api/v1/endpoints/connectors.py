@@ -1,6 +1,6 @@
 """Connector status endpoints."""
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.api.dependencies.auth import require_admin
 from app.connectors.catalog import CONNECTOR_CATALOG
@@ -13,11 +13,15 @@ from app.schemas.connectors import (
     ConnectorCatalogResponse,
     ConnectorConfigurationGuideItemResponse,
     ConnectorDiagnosticResponse,
+    ConnectorEnvironmentResponse,
+    ConnectorEnvironmentUpdateRequest,
+    ConnectorEnvironmentValueResponse,
     ConnectorRuntimeResponse,
     ConnectorStatusResponse,
     EventModelFieldResponse,
     EventModelResponse,
 )
+from app.services.environment import ConnectorEnvironmentService
 
 router = APIRouter(dependencies=[Depends(require_admin)])
 
@@ -132,6 +136,7 @@ async def connector_configuration_guide() -> list[ConnectorConfigurationGuideIte
                 "EVENT_SOURCE=zabbix_api",
                 "ENABLE_ZABBIX_API=true",
                 "ZABBIX_API_URL",
+                "ZABBIX_WEB_URL",
                 "ZABBIX_USERNAME",
                 "ZABBIX_PASSWORD",
             ],
@@ -141,6 +146,7 @@ async def connector_configuration_guide() -> list[ConnectorConfigurationGuideIte
                 "ENABLE_ZABBIX_API=true",
                 "ENABLE_ZABBIX_DB=false",
                 "ZABBIX_API_URL=https://zabbix.example.com/api_jsonrpc.php",
+                "ZABBIX_WEB_URL=https://zabbix.example.com",
                 "ZABBIX_USERNAME=<zabbix-user>",
                 "ZABBIX_PASSWORD=<zabbix-password>",
             ],
@@ -186,3 +192,41 @@ async def connector_configuration_guide() -> list[ConnectorConfigurationGuideIte
             ),
         ),
     ]
+
+
+@router.get(
+    "/environment",
+    response_model=ConnectorEnvironmentResponse,
+    summary="Connector environment settings",
+)
+async def connector_environment() -> ConnectorEnvironmentResponse:
+    """Return sanitized connector environment values."""
+    values = ConnectorEnvironmentService().values()
+    return ConnectorEnvironmentResponse(
+        values=[ConnectorEnvironmentValueResponse.model_validate(value) for value in values],
+        restart_required=True,
+        apply_command="docker compose up -d --force-recreate backend scheduler nginx",
+    )
+
+
+@router.put(
+    "/environment",
+    response_model=ConnectorEnvironmentResponse,
+    summary="Update connector environment settings",
+)
+async def update_connector_environment(
+    payload: ConnectorEnvironmentUpdateRequest,
+) -> ConnectorEnvironmentResponse:
+    """Persist connector environment values to the mounted .env file."""
+    try:
+        values = ConnectorEnvironmentService().update(payload.values)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+    return ConnectorEnvironmentResponse(
+        values=[ConnectorEnvironmentValueResponse.model_validate(value) for value in values],
+        restart_required=True,
+        apply_command="docker compose up -d --force-recreate backend scheduler nginx",
+    )

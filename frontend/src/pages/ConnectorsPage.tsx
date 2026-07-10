@@ -3,6 +3,7 @@ import { DatabaseZap, Globe2, RadioTower, ShieldCheck } from 'lucide-react';
 import { ConnectorCatalogPanel } from '../components/connectors/ConnectorCatalogPanel';
 import { ConnectorConfigurationGuidePanel } from '../components/connectors/ConnectorConfigurationGuidePanel';
 import { ConnectorDiagnosticsPanel } from '../components/connectors/ConnectorDiagnosticsPanel';
+import { ConnectorEnvironmentPanel } from '../components/connectors/ConnectorEnvironmentPanel';
 import { ConnectorRuntimePanel } from '../components/connectors/ConnectorRuntimePanel';
 import { ConnectorStatusGrid } from '../components/connectors/ConnectorStatusGrid';
 import { EventModelPanel } from '../components/connectors/EventModelPanel';
@@ -52,6 +53,7 @@ export function ConnectorsPage() {
         ))}
       </div>
 
+      <ConnectorEnvironmentPanel />
       <ConnectorRuntimePanel />
       <ConnectorStatusGrid />
       <ConnectorDiagnosticsPanel />
