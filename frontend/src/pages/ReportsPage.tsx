@@ -4,17 +4,21 @@ import {
   CalendarClock,
   CheckCircle2,
   Database,
+  ExternalLink,
+  Eye,
   FileDown,
   RefreshCw,
   Send,
   Server,
 } from 'lucide-react';
+import { Link } from 'react-router-dom';
 
 import {
   ConnectorDiagnostic,
   EventSyncResult,
   WeeklyDiscordReport,
   WeeklyDiscordReportDailyTrend,
+  WeeklyDiscordReportEvent,
   WeeklyDiscordReportMetric,
   WeeklyDiscordOpenProblem,
   WeeklyDiscordReportStatus,
@@ -27,6 +31,18 @@ import {
   syncEvents,
 } from '../services/api';
 import { useI18n } from '../i18n/I18nProvider';
+
+type AlertDetail = {
+  problem_id: string | null;
+  title: string;
+  host: string | null;
+  severity: string | null;
+  status: string | null;
+  started_at: string | null;
+  operational_data: string | null;
+  links: string[];
+  action?: string;
+};
 
 function formatDateTime(value: string | null, fallback: string) {
   if (!value) {
@@ -56,6 +72,7 @@ export function ReportsPage() {
   const [isPushingMonthlyReport, setIsPushingMonthlyReport] = useState(false);
   const [pushMessage, setPushMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [selectedAlert, setSelectedAlert] = useState<AlertDetail | null>(null);
 
   const readableEvents = useMemo(() => {
     if (!report || report.total_events === 0) {
@@ -198,7 +215,7 @@ export function ReportsPage() {
         </div>
       </div>
 
-      <section className="rounded-md border border-white/10 bg-white/[0.04] p-6">
+      <section className="animate-fade-slide-up rounded-md border border-white/10 bg-white/[0.04] p-6">
         <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
           <div>
             <div className="flex items-center gap-3">
@@ -237,20 +254,24 @@ export function ReportsPage() {
         </div>
 
         <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <MetricCard label={t.reports.discordMessages} value={report?.total_events ?? 0} />
-          <MetricCard label={t.reports.readableAlerts} value={readableEvents} />
-          <MetricCard label={t.reports.stillOpen} value={report?.open_events ?? 0} />
-          <MetricCard label={t.reports.resolved} value={report?.resolved_events ?? 0} />
+          <MetricCard label={t.reports.discordMessages} value={report?.total_events ?? 0} to="/events" />
+          <MetricCard label={t.reports.readableAlerts} value={readableEvents} to="/events" />
+          <MetricCard label={t.reports.stillOpen} value={report?.open_events ?? 0} to="/events?status=problem" />
+          <MetricCard label={t.reports.resolved} value={report?.resolved_events ?? 0} to="/events?status=resolved" />
         </div>
       </section>
 
       <DailyTrendPanel items={report?.daily_trend ?? []} />
+      <SeverityImpactPanel items={report?.by_severity ?? []} total={readableEvents} />
 
       <StabilizationRecommendationsPanel report={report} />
 
       <SecurityAdvisoriesPanel items={report?.security_advisories ?? []} />
 
-      <OpenProblemsPanel items={report?.open_problems ?? []} />
+      <OpenProblemsPanel
+        items={report?.open_problems ?? []}
+        onOpen={(problem) => setSelectedAlert(openProblemToDetail(problem))}
+      />
 
       <section className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
         <DiscordReachabilityPanel report={report} diagnostic={discordDiagnostic} />
@@ -279,7 +300,10 @@ export function ReportsPage() {
             </thead>
             <tbody className="divide-y divide-white/10">
               {(report?.recent_events ?? []).map((event) => (
-                <tr key={event.problem_id ?? event.started_at} className="text-slate-300">
+                <tr
+                  key={event.problem_id ?? event.started_at}
+                  className="text-slate-300 transition hover:bg-cyan-300/[0.03]"
+                >
                   <td className="py-3 pr-4">
                     <p className="font-medium text-white">{event.title}</p>
                     {!event.details_available ? (
@@ -307,6 +331,22 @@ export function ReportsPage() {
                     ) : (
                       t.reports.noLink
                     )}
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedAlert(reportEventToDetail(event))}
+                        className="inline-flex items-center gap-1 rounded-md border border-white/10 px-2 py-1 text-xs text-slate-200 transition hover:border-cyan-300/40 hover:bg-cyan-300/10"
+                      >
+                        <Eye className="h-3.5 w-3.5" aria-hidden="true" />
+                        Details
+                      </button>
+                      <Link
+                        to={eventExplorerHref(event.problem_id, event.status)}
+                        className="inline-flex items-center gap-1 rounded-md border border-white/10 px-2 py-1 text-xs text-cyan-200 transition hover:border-cyan-300/40 hover:bg-cyan-300/10"
+                      >
+                        Events
+                      </Link>
+                    </div>
                   </td>
                   <td className="py-3 pr-4">
                     {formatDateTime(event.started_at, t.reports.noTimestamp)}
@@ -330,6 +370,9 @@ export function ReportsPage() {
       ) : null}
 
       {error ? <p className="text-sm text-rose-300">{error}</p> : null}
+      {selectedAlert ? (
+        <AlertDetailPanel alert={selectedAlert} onClose={() => setSelectedAlert(null)} />
+      ) : null}
     </section>
   );
 }
@@ -366,12 +409,20 @@ function StabilizationRecommendationsPanel({ report }: { report: WeeklyDiscordRe
   );
 }
 
-function MetricCard({ label, value }: { label: string; value: number }) {
+function MetricCard({ label, value, to }: { label: string; value: number; to: string }) {
   return (
-    <div className="rounded-md border border-white/10 bg-slate-950/60 p-4">
+    <Link
+      to={to}
+      className="group block rounded-md border border-white/10 bg-slate-950/60 p-4 transition hover:-translate-y-0.5 hover:border-cyan-300/40 hover:bg-cyan-300/[0.05] focus:outline-none focus:ring-2 focus:ring-cyan-300/50"
+    >
       <p className="text-sm text-slate-400">{label}</p>
-      <p className="mt-2 text-3xl font-semibold text-white">{value}</p>
-    </div>
+      <div className="mt-2 flex items-end justify-between gap-3">
+        <p className="text-3xl font-semibold text-white">{value}</p>
+        <span className="text-xs font-semibold text-cyan-300 opacity-0 transition group-hover:opacity-100">
+          Open
+        </span>
+      </div>
+    </Link>
   );
 }
 
@@ -431,7 +482,13 @@ function SecurityAdvisoriesPanel({ items }: { items: WeeklyDiscordSecurityAdviso
   );
 }
 
-function OpenProblemsPanel({ items }: { items: WeeklyDiscordOpenProblem[] }) {
+function OpenProblemsPanel({
+  items,
+  onOpen,
+}: {
+  items: WeeklyDiscordOpenProblem[];
+  onOpen: (problem: WeeklyDiscordOpenProblem) => void;
+}) {
   const { t } = useI18n();
 
   return (
@@ -455,7 +512,7 @@ function OpenProblemsPanel({ items }: { items: WeeklyDiscordOpenProblem[] }) {
         {items.map((problem) => (
           <article
             key={`${problem.problem_id ?? problem.title}-${problem.started_at ?? 'unknown'}`}
-            className="rounded-md border border-white/10 bg-slate-950/70 p-4"
+            className="animate-fade-slide-up rounded-md border border-white/10 bg-slate-950/70 p-4 transition hover:-translate-y-0.5 hover:border-rose-200/30 hover:bg-rose-300/[0.04]"
           >
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div className="min-w-0">
@@ -514,16 +571,33 @@ function OpenProblemsPanel({ items }: { items: WeeklyDiscordOpenProblem[] }) {
               </p>
             </div>
 
-            {problem.links.length > 0 ? (
-              <a
-                href={problem.links[0]}
-                target="_blank"
-                rel="noreferrer"
-                className="mt-4 inline-flex items-center rounded-md bg-cyan-400 px-3 py-2 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300"
+            <div className="mt-4 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => onOpen(problem)}
+                className="inline-flex items-center gap-2 rounded-md bg-cyan-400 px-3 py-2 text-sm font-semibold text-slate-950 transition hover:-translate-y-0.5 hover:bg-cyan-300"
               >
-                {t.reports.viewProblem}
-              </a>
-            ) : null}
+                <Eye className="h-4 w-4" aria-hidden="true" />
+                Ouvrir l'alerte
+              </button>
+              <Link
+                to={eventExplorerHref(problem.problem_id, problem.status)}
+                className="inline-flex items-center rounded-md border border-white/10 px-3 py-2 text-sm font-semibold text-cyan-100 transition hover:-translate-y-0.5 hover:bg-cyan-300/10"
+              >
+                Voir dans Events
+              </Link>
+              {problem.links.length > 0 ? (
+                <a
+                  href={problem.links[0]}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-2 rounded-md border border-white/10 px-3 py-2 text-sm font-semibold text-slate-100 transition hover:-translate-y-0.5 hover:bg-white/5"
+                >
+                  {t.reports.viewProblem}
+                  <ExternalLink className="h-4 w-4" aria-hidden="true" />
+                </a>
+              ) : null}
+            </div>
           </article>
         ))}
       </div>
@@ -535,6 +609,193 @@ function OpenProblemsPanel({ items }: { items: WeeklyDiscordOpenProblem[] }) {
       ) : null}
     </section>
   );
+}
+
+function SeverityImpactPanel({
+  items,
+  total,
+}: {
+  items: WeeklyDiscordReportMetric[];
+  total: number;
+}) {
+  const maxValue = Math.max(...items.map((item) => item.value), 1);
+  const severityColors: Record<string, string> = {
+    disaster: 'bg-red-400',
+    high: 'bg-rose-400',
+    average: 'bg-amber-300',
+    warning: 'bg-yellow-300',
+    information: 'bg-cyan-300',
+    unknown: 'bg-slate-400',
+  };
+
+  return (
+    <section className="animate-fade-slide-up rounded-md border border-white/10 bg-white/[0.04] p-6">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-2">
+          <AlertTriangle className="h-5 w-5 text-amber-200" aria-hidden="true" />
+          <h3 className="text-lg font-semibold text-white">Impact par severite</h3>
+        </div>
+        <span className="rounded-md bg-slate-950/70 px-3 py-1.5 text-sm text-slate-300">
+          {total} alertes lisibles
+        </span>
+      </div>
+      <div className="mt-5 grid gap-4 lg:grid-cols-[0.8fr_1.2fr]">
+        <div className="rounded-md border border-white/10 bg-slate-950/60 p-5">
+          <div className="relative mx-auto flex aspect-square max-w-56 items-center justify-center rounded-full border border-white/10 bg-slate-900">
+            <div className="absolute inset-4 rounded-full border border-cyan-300/20" />
+            <div className="text-center">
+              <p className="text-4xl font-semibold text-white">{items.length}</p>
+              <p className="mt-1 text-xs uppercase tracking-wide text-slate-400">niveaux detectes</p>
+            </div>
+          </div>
+        </div>
+        <div className="space-y-3">
+          {items.map((item) => {
+            const normalized = item.label.toLowerCase();
+            const width = Math.max((item.value / maxValue) * 100, 5);
+            const color = severityColors[normalized] ?? severityColors.unknown;
+            return (
+              <Link
+                key={item.label}
+                to={`/events?severity=${encodeURIComponent(item.label)}`}
+                className="group block rounded-md border border-white/10 bg-slate-950/60 p-4 transition hover:-translate-y-0.5 hover:border-cyan-300/40 hover:bg-white/[0.06]"
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-sm font-semibold text-white">{item.label}</span>
+                  <span className="text-sm text-slate-300">{item.value}</span>
+                </div>
+                <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-800">
+                  <div
+                    className={['h-full rounded-full transition-all group-hover:brightness-125', color].join(' ')}
+                    style={{ width: `${width}%` }}
+                  />
+                </div>
+              </Link>
+            );
+          })}
+          {items.length === 0 ? (
+            <p className="rounded-md border border-white/10 bg-slate-950/60 p-4 text-sm text-slate-400">
+              Aucune severite exploitable pour le moment.
+            </p>
+          ) : null}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function AlertDetailPanel({
+  alert,
+  onClose,
+}: {
+  alert: AlertDetail;
+  onClose: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/75 p-4 backdrop-blur-sm sm:items-center">
+      <section className="animate-fade-slide-up w-full max-w-3xl rounded-md border border-cyan-300/25 bg-slate-950 p-5 shadow-2xl shadow-black/50">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-cyan-300">
+              Contenu alerte
+            </p>
+            <h3 className="mt-2 text-lg font-semibold text-white">{alert.title}</h3>
+            <p className="mt-1 text-xs text-slate-500">
+              {alert.problem_id ? `ID ${alert.problem_id}` : 'ID non detecte'}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-md border border-white/10 px-3 py-2 text-sm text-slate-200 transition hover:bg-white/5"
+          >
+            Fermer
+          </button>
+        </div>
+        <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <ProblemDetail label="Host" value={alert.host ?? 'Non detecte'} />
+          <ProblemDetail label="Severity" value={alert.severity ?? 'Non detectee'} />
+          <ProblemDetail label="Status" value={alert.status ?? 'unknown'} />
+          <ProblemDetail label="Started" value={formatDateTime(alert.started_at, 'Pas de date')} />
+        </div>
+        {alert.operational_data ? (
+          <div className="mt-4 rounded-md border border-white/10 bg-white/[0.03] p-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Donnees operationnelles
+            </p>
+            <p className="mt-2 text-sm leading-6 text-slate-200">{alert.operational_data}</p>
+          </div>
+        ) : null}
+        {alert.action ? (
+          <div className="mt-4 rounded-md border border-emerald-300/15 bg-emerald-300/[0.04] p-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-emerald-200">
+              Action recommandee
+            </p>
+            <p className="mt-2 text-sm leading-6 text-slate-200">{alert.action}</p>
+          </div>
+        ) : null}
+        <div className="mt-5 flex flex-wrap gap-2">
+          <Link
+            to={eventExplorerHref(alert.problem_id, alert.status)}
+            className="inline-flex items-center rounded-md bg-cyan-400 px-3 py-2 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300"
+          >
+            Ouvrir dans Events
+          </Link>
+          {alert.links.map((link) => (
+            <a
+              key={link}
+              href={link}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-2 rounded-md border border-white/10 px-3 py-2 text-sm font-semibold text-slate-100 transition hover:bg-white/5"
+            >
+              Source alerte
+              <ExternalLink className="h-4 w-4" aria-hidden="true" />
+            </a>
+          ))}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function openProblemToDetail(problem: WeeklyDiscordOpenProblem): AlertDetail {
+  return {
+    problem_id: problem.problem_id,
+    title: problem.title,
+    host: problem.host,
+    severity: problem.severity,
+    status: problem.status,
+    started_at: problem.started_at,
+    operational_data: problem.operational_data,
+    links: problem.links,
+    action: problem.recommended_action,
+  };
+}
+
+function reportEventToDetail(event: WeeklyDiscordReportEvent): AlertDetail {
+  return {
+    problem_id: event.problem_id,
+    title: event.title,
+    host: event.host,
+    severity: event.severity,
+    status: event.status,
+    started_at: event.started_at,
+    operational_data: event.operational_data,
+    links: event.links,
+  };
+}
+
+function eventExplorerHref(problemId: string | null, status: string | null) {
+  const params = new URLSearchParams();
+  if (problemId) {
+    params.set('q', problemId);
+  }
+  if (status) {
+    params.set('status', status);
+  }
+  const query = params.toString();
+  return query ? `/events?${query}` : '/events';
 }
 
 function ProblemDetail({ label, value }: { label: string; value: string }) {

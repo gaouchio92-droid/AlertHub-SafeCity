@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, ArrowRight, ExternalLink, Filter, RefreshCw, Search } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
 
 import { AlertEvent, EventList, EventSyncResult, getEvents, syncEvents } from '../services/api';
 
@@ -68,11 +69,12 @@ function statusClassName(status: string | null) {
 }
 
 export function EventsPage() {
+  const [searchParams] = useSearchParams();
   const [events, setEvents] = useState<EventList | null>(null);
   const [filters, setFilters] = useState<EventFilterState>({
-    query: '',
-    status: '',
-    severity: '',
+    query: searchParams.get('q') ?? '',
+    status: searchParams.get('status') ?? '',
+    severity: searchParams.get('severity') ?? '',
     includeUnparsed: false,
   });
   const [offset, setOffset] = useState(0);
@@ -110,6 +112,15 @@ export function EventsPage() {
   useEffect(() => {
     void loadEvents(0);
   }, [loadEvents]);
+
+  useEffect(() => {
+    setFilters((current) => ({
+      ...current,
+      query: searchParams.get('q') ?? '',
+      status: searchParams.get('status') ?? '',
+      severity: searchParams.get('severity') ?? '',
+    }));
+  }, [searchParams]);
 
   async function handleSync() {
     setIsSyncing(true);
