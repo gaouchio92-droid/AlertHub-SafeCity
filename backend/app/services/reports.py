@@ -27,8 +27,16 @@ class ReportService:
 
     def build_weekly_discord_report(self) -> WeeklyDiscordReportResponse:
         """Return a rolling seven-day Discord event report."""
+        return self.build_discord_report(period_days=7)
+
+    def build_monthly_discord_report(self) -> WeeklyDiscordReportResponse:
+        """Return a rolling twenty-eight-day Discord event report."""
+        return self.build_discord_report(period_days=28)
+
+    def build_discord_report(self, *, period_days: int) -> WeeklyDiscordReportResponse:
+        """Return a rolling Discord event report for the requested period."""
         period_end = datetime.now(UTC)
-        period_start = period_end - timedelta(days=7)
+        period_start = period_end - timedelta(days=period_days)
         all_discord_filters: tuple[ColumnElement[bool], ...] = (
             Event.source == "discord",
             Event.started_at >= period_start,
@@ -145,6 +153,15 @@ class ReportService:
     def build_weekly_discord_management_pdf(self) -> bytes:
         """Return a polished PDF report suitable for operational management."""
         report = self.build_weekly_discord_report()
+        return build_weekly_discord_pdf(
+            report,
+            findings=self._management_findings(report),
+            recommendations=self._stabilization_recommendations(report),
+        )
+
+    def build_monthly_discord_management_pdf(self) -> bytes:
+        """Return a polished monthly PDF report suitable for operational management."""
+        report = self.build_monthly_discord_report()
         return build_weekly_discord_pdf(
             report,
             findings=self._management_findings(report),

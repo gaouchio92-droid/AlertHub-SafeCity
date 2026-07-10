@@ -10,6 +10,7 @@ from app.core.config.settings import get_settings
 from app.core.logging import configure_logging, get_logger
 from app.database.session import SessionLocal, dispose_engine
 from app.services.events import EventService
+from app.services.scheduled_reports import ScheduledReportService
 
 logger = get_logger(__name__)
 
@@ -51,12 +52,14 @@ class SyncScheduler:
         connector_events = await connector_manager.sync()
         with SessionLocal() as db:
             result = EventService(db).upsert_connector_events(connector_events)
+            deliveries = ScheduledReportService(db, self._settings).publish_due_reports()
         logger.info(
             "Scheduled connector sync completed",
             extra={
                 "sync_received": result.received,
                 "sync_created": result.created,
                 "sync_updated": result.updated,
+                "report_deliveries": len(deliveries),
             },
         )
 

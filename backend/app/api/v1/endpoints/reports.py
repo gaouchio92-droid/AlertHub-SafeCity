@@ -102,6 +102,39 @@ def export_weekly_discord_report_pdf(
     )
 
 
+@router.get(
+    "/monthly-discord",
+    response_model=WeeklyDiscordReportResponse,
+    summary="Monthly Discord report",
+)
+def monthly_discord_report(
+    db: Annotated[Session, Depends(get_db)],
+) -> WeeklyDiscordReportResponse:
+    """Return a rolling four-week Discord report."""
+    return ReportService(db).build_monthly_discord_report()
+
+
+@router.get(
+    "/monthly-discord/export.pdf",
+    response_class=Response,
+    summary="Export monthly Discord management report as PDF",
+)
+def export_monthly_discord_report_pdf(
+    db: Annotated[Session, Depends(get_db)],
+) -> Response:
+    """Return a polished monthly PDF report suitable for management sharing."""
+    content = ReportService(db).build_monthly_discord_management_pdf()
+    return Response(
+        content=content,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": (
+                'attachment; filename="alerthub-monthly-discord-report.pdf"'
+            ),
+        },
+    )
+
+
 @router.post(
     "/weekly-discord/push-discord",
     response_model=WeeklyDiscordReportPushResponse,
@@ -123,6 +156,43 @@ def push_weekly_discord_report_to_discord(
                 "**AlertHub Safe City**\n"
                 "Rapport hebdomadaire PDF genere automatiquement. "
                 "Veuillez consulter la piece jointe pour les problemes non resolus."
+            ),
+        )
+    except DiscordReportPublisherError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=str(exc),
+        ) from exc
+
+    return WeeklyDiscordReportPushResponse(
+        delivered=delivery.delivered,
+        channel_id=delivery.channel_id,
+        message_id=delivery.message_id,
+        filename=delivery.filename,
+    )
+
+
+@router.post(
+    "/monthly-discord/push-discord",
+    response_model=WeeklyDiscordReportPushResponse,
+    summary="Push monthly Discord PDF report to Discord",
+)
+def push_monthly_discord_report_to_discord(
+    db: Annotated[Session, Depends(get_db)],
+    settings: Annotated[Settings, Depends(get_settings)],
+    _user: Annotated[User, Depends(require_report_push)],
+) -> WeeklyDiscordReportPushResponse:
+    """Generate the monthly PDF report and publish it to the configured Discord channel."""
+    filename = "alerthub-monthly-discord-report.pdf"
+    content = ReportService(db).build_monthly_discord_management_pdf()
+    try:
+        delivery = DiscordReportPublisher(settings).publish_pdf(
+            content,
+            filename=filename,
+            summary=(
+                "**AlertHub Safe City**\n"
+                "Rapport mensuel PDF genere automatiquement sur 4 semaines. "
+                "Veuillez consulter la piece jointe pour la synthese et les escalades."
             ),
         )
     except DiscordReportPublisherError as exc:

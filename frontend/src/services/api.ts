@@ -308,6 +308,13 @@ export async function pushWeeklyDiscordReportToDiscord(): Promise<WeeklyDiscordR
   return response.data;
 }
 
+export async function pushMonthlyDiscordReportToDiscord(): Promise<WeeklyDiscordReportPushResult> {
+  const response = await apiClient.post<WeeklyDiscordReportPushResult>(
+    '/reports/monthly-discord/push-discord',
+  );
+  return response.data;
+}
+
 export async function syncEvents(): Promise<EventSyncResult> {
   const response = await apiClient.post<EventSyncResult>('/events/sync');
   return response.data;

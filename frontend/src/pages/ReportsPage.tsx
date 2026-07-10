@@ -23,6 +23,7 @@ import {
   getWeeklyDiscordReport,
   getWeeklyDiscordReportStatus,
   pushWeeklyDiscordReportToDiscord,
+  pushMonthlyDiscordReportToDiscord,
   syncEvents,
 } from '../services/api';
 import { useI18n } from '../i18n/I18nProvider';
@@ -52,6 +53,7 @@ export function ReportsPage() {
   const [syncResult, setSyncResult] = useState<EventSyncResult | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
   const [isPushingReport, setIsPushingReport] = useState(false);
+  const [isPushingMonthlyReport, setIsPushingMonthlyReport] = useState(false);
   const [pushMessage, setPushMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -114,6 +116,22 @@ export function ReportsPage() {
     }
   }
 
+  async function handlePushMonthlyReportToDiscord() {
+    setIsPushingMonthlyReport(true);
+    setPushMessage(null);
+    setError(null);
+    try {
+      const response = await pushMonthlyDiscordReportToDiscord();
+      setPushMessage(
+        `Rapport mensuel envoye a Discord (${response.filename}, channel ${response.channel_id})`,
+      );
+    } catch {
+      setError(t.reports.pushDiscordFailed);
+    } finally {
+      setIsPushingMonthlyReport(false);
+    }
+  }
+
   return (
     <section className="space-y-6">
       <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
@@ -135,6 +153,14 @@ export function ReportsPage() {
             <FileDown className="h-4 w-4" aria-hidden="true" />
             {t.reports.exportPdf}
           </a>
+          <a
+            href="/api/v1/reports/monthly-discord/export.pdf"
+            download="alerthub-monthly-discord-report.pdf"
+            className="inline-flex items-center justify-center gap-2 rounded-md border border-cyan-300/30 px-4 py-2 text-sm font-semibold text-cyan-100 transition hover:bg-cyan-300/10"
+          >
+            <FileDown className="h-4 w-4" aria-hidden="true" />
+            PDF mensuel
+          </a>
           <button
             type="button"
             onClick={handlePushReportToDiscord}
@@ -143,6 +169,15 @@ export function ReportsPage() {
           >
             <Send className={['h-4 w-4', isPushingReport ? 'animate-pulse' : ''].join(' ')} />
             {isPushingReport ? t.reports.pushingDiscord : t.reports.pushDiscord}
+          </button>
+          <button
+            type="button"
+            onClick={handlePushMonthlyReportToDiscord}
+            disabled={isPushingMonthlyReport}
+            className="inline-flex items-center justify-center gap-2 rounded-md border border-emerald-300/30 px-4 py-2 text-sm font-semibold text-emerald-100 transition hover:bg-emerald-300/10 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <Send className={['h-4 w-4', isPushingMonthlyReport ? 'animate-pulse' : ''].join(' ')} />
+            {isPushingMonthlyReport ? 'Envoi mensuel...' : 'Envoyer mensuel'}
           </button>
           <a
             href="/api/v1/reports/weekly-discord/export"
@@ -187,6 +222,9 @@ export function ReportsPage() {
             </div>
             <p className="mt-3 text-sm leading-6 text-slate-300">
               {t.reports.pipelineDescription}
+            </p>
+            <p className="mt-3 text-sm text-emerald-100">
+              Envoi automatique actif: hebdomadaire tous les 7 jours, mensuel toutes les 4 semaines.
             </p>
             {syncResult ? (
               <p className="mt-3 text-sm text-emerald-200">

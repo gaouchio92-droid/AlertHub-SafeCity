@@ -56,6 +56,9 @@ class Settings(BaseSettings):
 
     log_level: str = "INFO"
     sync_interval_seconds: int = Field(default=300, ge=60)
+    enable_scheduled_report_delivery: bool = True
+    weekly_report_interval_days: int = Field(default=7, ge=1)
+    monthly_report_interval_days: int = Field(default=28, ge=7)
     default_escalation_owner: str = "NOC Team"
     escalation_owner_rules: str = (
         "disaster:Incident Manager;"
