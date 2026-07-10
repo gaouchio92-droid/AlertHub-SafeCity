@@ -174,61 +174,60 @@ class ReportService:
         return [
             WeeklyDiscordSecurityAdvisoryResponse(
                 component="Vite dev server",
-                current_version="6.0.5",
-                severity="High",
-                status="Upgrade required",
+                current_version="6.4.3",
+                severity="Low",
+                status="Patched",
                 finding=(
-                    "Recent Vite advisories affect 6.x dev-server file access controls before "
-                    "6.4.2. Production builds are less exposed, but development servers must not "
-                    "be internet-facing."
+                    "The Vite 6 development server has been upgraded past the vulnerable 6.0.x "
+                    "branch. Production still serves static files through Nginx."
                 ),
                 recommendation=(
-                    "Upgrade Vite to at least 6.4.2, keep the dev server local-only, and never "
-                    "expose .env or source maps from development environments."
+                    "Keep the dev server local-only, keep npm audit in CI, and never expose .env "
+                    "or source maps from development environments."
                 ),
-                reference="NVD CVE-2026-39365 / Vite advisories",
+                reference="npm audit / Vite advisories",
             ),
             WeeklyDiscordSecurityAdvisoryResponse(
                 component="Nginx reverse proxy",
-                current_version="1.27-alpine",
-                severity="High",
-                status="Upgrade required",
+                current_version="1.30.3-alpine",
+                severity="Low",
+                status="Patched",
                 finding=(
-                    "The configured Nginx image is behind current fixed branches listed in 2026 "
-                    "Nginx security advisories."
+                    "The reverse proxy image has been moved from 1.27-alpine to a patched "
+                    "1.30.x Alpine image."
                 ),
                 recommendation=(
-                    "Move to a patched stable image such as nginx:1.30.3-alpine or newer, pin "
-                    "images by digest in production, and rebuild the stack."
+                    "Pin images by digest in production, rebuild regularly, and keep security "
+                    "headers enabled at the edge."
                 ),
                 reference="nginx.org security advisories",
             ),
             WeeklyDiscordSecurityAdvisoryResponse(
                 component="PostgreSQL",
-                current_version="16-alpine",
-                severity="Medium",
-                status="Patch validation required",
+                current_version="16.14-alpine",
+                severity="Low",
+                status="Pinned minor release",
                 finding=(
-                    "The major tag does not show the exact minor version in configuration. "
-                    "PostgreSQL security fixes are delivered through minor releases."
+                    "The PostgreSQL image is pinned to a current 16.x minor release instead of "
+                    "the floating major tag."
                 ),
                 recommendation=(
-                    "Pin and run the latest PostgreSQL 16 minor image, verify backups before "
-                    "upgrade, then apply migrations after the database is healthy."
+                    "Verify backups before every database image upgrade, then apply Alembic "
+                    "migrations only after PostgreSQL is healthy."
                 ),
                 reference="PostgreSQL security information",
             ),
             WeeklyDiscordSecurityAdvisoryResponse(
                 component="FastAPI / Starlette stack",
-                current_version="FastAPI 0.115.14",
-                severity="Medium",
-                status="Monitor and audit",
+                current_version="FastAPI 0.139.0 / Uvicorn 0.51.0",
+                severity="Low",
+                status="Upgraded and monitored",
                 finding=(
-                    "FastAPI depends on Starlette and ASGI middleware behavior. Recent Host "
-                    "header and request handling advisories make dependency auditing important."
+                    "The ASGI stack has been upgraded. Dependency auditing remains important "
+                    "because FastAPI pulls Starlette transitively."
                 ),
                 recommendation=(
-                    "Run pip-audit in CI, pin Starlette through FastAPI-compatible upgrades, "
+                    "Run pip-audit in CI, keep FastAPI-compatible Starlette updates current, "
                     "and keep trusted host/proxy headers strict at the edge."
                 ),
                 reference="FastAPI and Starlette advisories",
@@ -237,14 +236,14 @@ class ReportService:
                 component="Secrets and Discord token",
                 current_version="Environment-based secrets",
                 severity="High",
-                status="Operational control required",
+                status="Rotate in Discord portal",
                 finding=(
                     "Discord tokens, database credentials, and JWT secrets are environment "
                     "secrets. Exposure would allow bot abuse or data access."
                 ),
                 recommendation=(
-                    "Rotate exposed tokens immediately, keep .env out of Git, use production "
-                    "secret storage, and restrict bot permissions to the reporting channel."
+                    "Rotate the Discord bot token in the Discord Developer Portal, update .env "
+                    "through the admin connector screen, restart services, and keep .env out of Git."
                 ),
                 reference="AlertHub security baseline",
             ),
