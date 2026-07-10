@@ -130,20 +130,13 @@ class ReportService:
             "",
             *self._open_problem_lines(report),
             "",
-            "## Veille securite applicative",
-            "",
-            *self._security_advisory_lines(report),
-            "",
-            "## Recommandations de stabilisation",
+            "## Recommandations de stabilisation Discord",
             "",
             *self._stabilization_recommendations(report),
             "",
-            "## Prochaines actions conseillees",
+            "## Prochaines actions conseillees sur incidents",
             "",
-            "- Planifier une revue quotidienne des problemes ouverts.",
-            "- Confirmer que le bot Discord a acces au bon salon d'alertes.",
-            "- Standardiser le format des messages Discord emis par la supervision.",
-            "- Surveiller les erreurs backend et la sante Docker Compose apres chaque deploiement.",
+            *self._incident_action_plan(report),
             "",
             "_Rapport genere automatiquement par AlertHub Safe City._",
             "",
@@ -157,6 +150,7 @@ class ReportService:
             report,
             findings=self._management_findings(report),
             recommendations=self._stabilization_recommendations(report),
+            action_plan=self._incident_action_plan(report),
         )
 
     def build_monthly_discord_management_pdf(self) -> bytes:
@@ -166,6 +160,7 @@ class ReportService:
             report,
             findings=self._management_findings(report),
             recommendations=self._stabilization_recommendations(report),
+            action_plan=self._incident_action_plan(report),
         )
 
     @staticmethod
@@ -449,23 +444,84 @@ class ReportService:
         self,
         report: WeeklyDiscordReportResponse,
     ) -> list[str]:
-        recommendations = [
-            "- Garder PostgreSQL avec volume persistant et sauvegarde planifiee.",
-            "- Activer une rotation des logs backend, nginx et Docker.",
-            "- Ajouter une tache de synchronisation planifiee pour eviter les imports manuels.",
-            "- Mettre en place une alerte de sante sur /api/v1/health.",
-            "- Executer les migrations Alembic dans le pipeline de deploiement.",
-        ]
-        if report.data_quality.unnamed_events or report.data_quality.unknown_host_events:
-            recommendations.append(
-                "- Finaliser le parsing Discord pour extraire systematiquement host, severite, "
-                "statut, liens et nom du probleme."
-            )
+        recommendations: list[str] = []
+
         if report.open_events:
             recommendations.append(
-                "- Prioriser les problemes ouverts avec un suivi d'escalade par responsable."
+                f"- Traiter en priorite les {report.open_events} probleme(s) Discord encore "
+                "ouverts, en commencant par les alertes critiques ou anciennes."
+            )
+            recommendations.append(
+                "- Affecter un responsable a chaque probleme ouvert et suivre l'escalade "
+                "jusqu'a resolution confirmee dans Discord."
+            )
+
+        critical_count = sum(
+            metric.value
+            for metric in report.by_severity
+            if metric.label.lower() in {"critical", "critique", "disaster", "high"}
+        )
+        if critical_count:
+            recommendations.append(
+                f"- Isoler les {critical_count} alerte(s) de severite elevee et verifier "
+                "immediatement la disponibilite des hosts concernes."
+            )
+
+        if report.by_host:
+            top_host = report.by_host[0]
+            recommendations.append(
+                f"- Concentrer l'analyse de stabilite sur {top_host.label}, qui concentre "
+                f"{top_host.value} evenement(s) Discord sur la periode."
+            )
+
+        if report.data_quality.unnamed_events or report.data_quality.unknown_host_events:
+            recommendations.append(
+                "- Normaliser les messages Discord entrants pour extraire systematiquement "
+                "host, severite, statut, liens et nom du probleme."
+            )
+
+        if not recommendations and report.total_events:
+            recommendations.append(
+                "- Aucun incident ouvert majeur sur la periode: maintenir la surveillance du "
+                "salon Discord et confirmer les resolutions dans les prochains rapports."
+            )
+        if not recommendations:
+            recommendations.append(
+                "- Aucun evenement Discord exploitable sur la periode: verifier que le bot lit "
+                "le salon d'alertes attendu avant la prochaine synthese."
             )
         return recommendations
+
+    def _incident_action_plan(
+        self,
+        report: WeeklyDiscordReportResponse,
+    ) -> list[str]:
+        if report.open_problems:
+            actions = [
+                (
+                    f"- Escalader {problem.title} sur {problem.host or 'host non detecte'} "
+                    f"vers {problem.escalation_owner or 'un responsable a designer'}; "
+                    f"age incident: {problem.age_label}."
+                )
+                for problem in report.open_problems[:5]
+            ]
+            actions.append(
+                "- Mettre a jour le message Discord d'origine avec le statut de traitement "
+                "afin que le prochain rapport distingue clairement ouvert et resolu."
+            )
+            return actions
+
+        if report.recent_events:
+            return [
+                "- Confirmer dans Discord que les derniers evenements resolus ne se repetent pas.",
+                "- Conserver les liens d'incident dans les messages Discord pour faciliter les "
+                "prochains exports."
+            ]
+
+        return [
+            "- Publier un message de test dans le salon Discord d'alertes pour valider la chaine "
+            "de collecte avant le prochain rapport."
+        ]
 
     def _count_missing(
         self,

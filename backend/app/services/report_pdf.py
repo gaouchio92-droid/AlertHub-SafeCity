@@ -145,6 +145,7 @@ def build_weekly_discord_pdf(
     *,
     findings: list[str],
     recommendations: list[str],
+    action_plan: list[str],
 ) -> bytes:
     """Render a polished management PDF for the weekly Discord report."""
     buffer = BytesIO()
@@ -193,6 +194,9 @@ def build_weekly_discord_pdf(
             _section_title("Synthese executive", styles),
             *_bullet_list(findings, styles),
             Spacer(1, 12),
+            _section_title("Dernieres informations operationnelles", styles),
+            _operational_snapshot_table(report),
+            Spacer(1, 14),
             _section_title("Tendance quotidienne", styles),
             DailyTrendChart(report, width=CONTENT_WIDTH),
             PageBreak(),
@@ -208,22 +212,11 @@ def build_weekly_discord_pdf(
             _section_title("Derniers evenements significatifs", styles),
             _events_table(report),
             PageBreak(),
-            _section_title("Veille securite applicative", styles),
-            _security_advisories_table(report),
-            Spacer(1, 18),
-            _section_title("Recommandations de stabilisation", styles),
+            _section_title("Recommandations de stabilisation Discord", styles),
             _recommendation_cards(recommendations, styles),
             Spacer(1, 18),
-            _section_title("Plan d'action conseille", styles),
-            *_bullet_list(
-                [
-                    "Planifier une revue quotidienne des problemes ouverts.",
-                    "Confirmer que le bot Discord lit le bon salon d'alertes.",
-                    "Standardiser le format des messages emis par la supervision.",
-                    "Surveiller les erreurs backend et la sante Docker apres chaque deploiement.",
-                ],
-                styles,
-            ),
+            _section_title("Plan d'action incidents", styles),
+            *_bullet_list(action_plan, styles),
             Spacer(1, 20),
             Paragraph("Rapport genere automatiquement par AlertHub Safe City.", styles["Muted"]),
         ]
@@ -389,6 +382,7 @@ def _events_table(report: WeeklyDiscordReportResponse) -> Table:
             _th("Host", styles),
             _th("Severite", styles),
             _th("Statut", styles),
+            _th("Derniere info", styles),
         ]
     ]
     for event in report.recent_events[:8]:
@@ -398,6 +392,7 @@ def _events_table(report: WeeklyDiscordReportResponse) -> Table:
                 _td(event.host or "Non detecte", styles),
                 _td(event.severity or "Non detectee", styles),
                 _td(event.status or "unknown", styles),
+                _td(_event_context(event.started_at, event.links), styles),
             ]
         )
     if len(rows) == 1:
@@ -407,9 +402,14 @@ def _events_table(report: WeeklyDiscordReportResponse) -> Table:
                 _td("-", styles),
                 _td("-", styles),
                 _td("-", styles),
+                _td("-", styles),
             ]
         )
-    table = Table(rows, colWidths=[14 * cm, 6 * cm, 3.5 * cm, 3.4 * cm], repeatRows=1)
+    table = Table(
+        rows,
+        colWidths=[9.6 * cm, 4.8 * cm, 3.1 * cm, 2.8 * cm, 6.6 * cm],
+        repeatRows=1,
+    )
     table.setStyle(_table_style())
     return table
 
@@ -422,7 +422,8 @@ def _open_problems_table(report: WeeklyDiscordReportResponse) -> Table:
             _th("Host", styles),
             _th("Severite", styles),
             _th("Age", styles),
-            _th("Action conseillee", styles),
+            _th("Responsable", styles),
+            _th("Action / lien", styles),
         ]
     ]
     for problem in report.open_problems[:10]:
@@ -432,7 +433,8 @@ def _open_problems_table(report: WeeklyDiscordReportResponse) -> Table:
                 _td(problem.host or "Non detecte", styles),
                 _td(problem.severity or "Non detectee", styles),
                 _td(problem.age_label, styles),
-                _td(problem.recommended_action, styles),
+                _td(problem.escalation_owner or "A assigner", styles),
+                _td(_problem_action_context(problem.recommended_action, problem.links), styles),
             ]
         )
     if len(rows) == 1:
@@ -442,48 +444,61 @@ def _open_problems_table(report: WeeklyDiscordReportResponse) -> Table:
             _td("-", styles),
             _td("-", styles),
             _td("-", styles),
+            _td("-", styles),
         ])
     table = Table(
         rows,
-        colWidths=[10.2 * cm, 5.2 * cm, 3 * cm, 2.4 * cm, 6.1 * cm],
+        colWidths=[7.4 * cm, 4.2 * cm, 2.8 * cm, 2.1 * cm, 3.2 * cm, 7.2 * cm],
         repeatRows=1,
     )
     table.setStyle(_table_style())
     return table
 
 
-def _security_advisories_table(report: WeeklyDiscordReportResponse) -> Table:
+def _operational_snapshot_table(report: WeeklyDiscordReportResponse) -> Table:
     styles = _styles()
+    top_host = report.by_host[0].label if report.by_host else "Non disponible"
+    top_severity = report.by_severity[0].label if report.by_severity else "Non disponible"
+    latest_event = report.recent_events[0] if report.recent_events else None
+    latest_label = (
+        f"{latest_event.title} - {latest_event.started_at:%d/%m/%Y %H:%M UTC}"
+        if latest_event and latest_event.started_at
+        else latest_event.title
+        if latest_event
+        else "Aucun evenement recent"
+    )
     rows = [
+        [_th("Indicateur", styles), _th("Valeur actuelle", styles), _th("Lecture operationnelle", styles)],
         [
-            _th("Composant", styles),
-            _th("Severite", styles),
-            _th("Statut", styles),
-            _th("Risque observe", styles),
-            _th("Solution recommandee", styles),
-        ]
+            _td("Dernier evenement Discord", styles),
+            _td(latest_label, styles),
+            _td("Point de depart pour le suivi de la situation la plus recente.", styles),
+        ],
+        [
+            _td("Host le plus impacte", styles),
+            _td(top_host, styles),
+            _td("Equipement a controler en priorite dans Discord et dans la supervision.", styles),
+        ],
+        [
+            _td("Severite dominante", styles),
+            _td(top_severity, styles),
+            _td("Niveau de risque observe sur les alertes lisibles de la periode.", styles),
+        ],
+        [
+            _td("Lisibilite Discord", styles),
+            _td(
+                (
+                    f"{max(report.total_events - report.data_quality.unnamed_events, 0)} "
+                    f"alerte(s) lisible(s) / {report.total_events}"
+                ),
+                styles,
+            ),
+            _td("Mesure si les messages Discord contiennent assez de details exploitables.", styles),
+        ],
     ]
-    for advisory in report.security_advisories:
-        rows.append(
-            [
-                _td(f"{advisory.component}\n{advisory.current_version}", styles),
-                _td(advisory.severity, styles),
-                _td(advisory.status, styles),
-                _td(advisory.finding, styles),
-                _td(advisory.recommendation, styles),
-            ]
-        )
-    if len(rows) == 1:
-        rows.append([
-            _td("Aucune alerte", styles),
-            _td("-", styles),
-            _td("-", styles),
-            _td("-", styles),
-            _td("-", styles),
-        ])
     table = Table(
         rows,
-        colWidths=[4.3 * cm, 2.3 * cm, 3.2 * cm, 8.2 * cm, 8.9 * cm],
+        colWidths=[5.2 * cm, 8.2 * cm, 13.5 * cm],
         repeatRows=1,
     )
     table.setStyle(_table_style())
@@ -566,6 +581,21 @@ def _truncate(value: str, max_length: int) -> str:
     if len(value) <= max_length:
         return value
     return f"{value[: max_length - 3]}..."
+
+
+def _event_context(started_at: object, links: list[str]) -> str:
+    parts: list[str] = []
+    if started_at:
+        parts.append(f"Date: {started_at:%d/%m/%Y %H:%M UTC}")
+    if links:
+        parts.append(f"Lien: {_truncate(links[0], 70)}")
+    return "\n".join(parts) if parts else "Aucune information complementaire"
+
+
+def _problem_action_context(action: str, links: list[str]) -> str:
+    if links:
+        return f"{action}\nLien: {_truncate(links[0], 70)}"
+    return action
 
 
 def _th(value: str, styles: dict[str, ParagraphStyle]) -> Paragraph:
