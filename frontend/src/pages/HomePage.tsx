@@ -123,6 +123,10 @@ export function HomePage() {
     () => diagnostics.find((diagnostic) => diagnostic.source === 'discord') ?? null,
     [diagnostics],
   );
+  const zabbixDiagnostic = useMemo(
+    () => diagnostics.find((diagnostic) => diagnostic.source === 'zabbix_api') ?? null,
+    [diagnostics],
+  );
 
   useEffect(() => {
     async function loadOperationalSummary() {
@@ -164,17 +168,17 @@ export function HomePage() {
               <Activity className="h-5 w-5 text-emerald-300" aria-hidden="true" />
               <h3 className="text-lg font-semibold text-white">Operational snapshot</h3>
             </div>
-            <p className="mt-2 text-sm text-slate-400">
-              {isLoadingOperations ? 'Loading live data' : 'Current seven-day Discord ingestion view'}
+          <p className="mt-2 text-sm text-slate-400">
+              {isLoadingOperations ? 'Loading live data' : 'Current multi-source ingestion view'}
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
             <Link
-              to="/events"
+              to="/events?source=zabbix_api&include_unparsed=true"
               className="inline-flex items-center gap-2 rounded-md bg-cyan-400 px-3 py-2 text-sm font-semibold text-slate-950 transition hover:-translate-y-0.5 hover:bg-cyan-300 focus:outline-none focus:ring-2 focus:ring-cyan-200"
             >
               <Database className="h-4 w-4" aria-hidden="true" />
-              Open Events
+              Open Zabbix Events
             </Link>
             <Link
               to="/reports"
@@ -188,7 +192,7 @@ export function HomePage() {
 
         <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <OperationalMetric
-            label="Stored events"
+            label="All stored events"
             value={eventSummary?.total_events ?? report?.total_events ?? 0}
             tone="cyan"
             to="/events"
@@ -200,8 +204,14 @@ export function HomePage() {
             to="/reports"
           />
           <OperationalMetric
-            label="Resolved"
+            label="Zabbix events"
+            value={eventSummary?.by_source.find((item) => item.label === 'zabbix_api')?.value ?? 0}
+            tone="amber"
+            to="/events?source=zabbix_api&include_unparsed=true"
+          />
+          <OperationalMetric
             value={eventSummary?.resolved_events ?? report?.resolved_events ?? 0}
+            label="Resolved"
             tone="emerald"
             to="/reports"
           />
@@ -221,7 +231,10 @@ export function HomePage() {
             Discord connector: {discordDiagnostic?.ready ? 'Ready' : 'Needs config'}
           </span>
           <span className="rounded-md border border-white/10 bg-slate-950/60 px-3 py-2">
-            Weekly window: {report?.total_events ?? 0} alerts
+            Zabbix API: {zabbixDiagnostic?.ready ? 'Connected' : zabbixDiagnostic?.enabled ? 'Needs config' : 'Disabled'}
+          </span>
+          <span className="rounded-md border border-white/10 bg-slate-950/60 px-3 py-2">
+            Sources: {eventSummary?.by_source.map((item) => `${sourceLabel(item.label)} ${item.value}`).join(' / ') || 'No events'}
           </span>
         </div>
 
@@ -359,6 +372,15 @@ function formatEventDate(value: string | null | undefined) {
     hour: '2-digit',
     minute: '2-digit',
   }).format(new Date(value));
+}
+
+function sourceLabel(source: string) {
+  const labels: Record<string, string> = {
+    discord: 'Discord',
+    zabbix_api: 'Zabbix API',
+    zabbix_database: 'Zabbix DB',
+  };
+  return labels[source] ?? source;
 }
 
 function OperationalMetric({

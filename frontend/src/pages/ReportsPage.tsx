@@ -14,7 +14,9 @@ import {
 import { Link } from 'react-router-dom';
 
 import {
+  AlertEvent,
   ConnectorDiagnostic,
+  EventSummary,
   EventSyncResult,
   WeeklyDiscordReport,
   WeeklyDiscordReportDailyTrend,
@@ -24,6 +26,8 @@ import {
   WeeklyDiscordReportStatus,
   WeeklyDiscordSecurityAdvisory,
   getConnectorDiagnostics,
+  getEventSummary,
+  getEvents,
   getWeeklyDiscordReport,
   getWeeklyDiscordReportStatus,
   pushWeeklyDiscordReportToDiscord,
@@ -66,6 +70,10 @@ export function ReportsPage() {
   const [status, setStatus] = useState<WeeklyDiscordReportStatus | null>(null);
   const [report, setReport] = useState<WeeklyDiscordReport | null>(null);
   const [discordDiagnostic, setDiscordDiagnostic] = useState<ConnectorDiagnostic | null>(null);
+  const [diagnostics, setDiagnostics] = useState<ConnectorDiagnostic[]>([]);
+  const [eventSummary, setEventSummary] = useState<EventSummary | null>(null);
+  const [recentSourceEvents, setRecentSourceEvents] = useState<AlertEvent[]>([]);
+  const [openSourceEvents, setOpenSourceEvents] = useState<AlertEvent[]>([]);
   const [syncResult, setSyncResult] = useState<EventSyncResult | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
   const [isPushingReport, setIsPushingReport] = useState(false);
@@ -88,8 +96,17 @@ export function ReportsPage() {
         getWeeklyDiscordReport(),
         getConnectorDiagnostics(),
       ]);
+      const [summaryResponse, recentEventsResponse, openEventsResponse] = await Promise.all([
+        getEventSummary(),
+        getEvents({ limit: 8, include_unparsed: true }),
+        getEvents({ status: 'problem', limit: 8, include_unparsed: true }),
+      ]);
       setStatus(statusResponse);
       setReport(reportResponse);
+      setDiagnostics(diagnosticsResponse);
+      setEventSummary(summaryResponse);
+      setRecentSourceEvents(recentEventsResponse.items);
+      setOpenSourceEvents(openEventsResponse.items);
       setDiscordDiagnostic(
         diagnosticsResponse.find((diagnostic) => diagnostic.source === 'discord') ?? null,
       );
@@ -254,12 +271,24 @@ export function ReportsPage() {
         </div>
 
         <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <MetricCard label={t.reports.discordMessages} value={report?.total_events ?? 0} to="/events" />
-          <MetricCard label={t.reports.readableAlerts} value={readableEvents} to="/events" />
+          <MetricCard label="All source events" value={eventSummary?.total_events ?? 0} to="/events" />
+          <MetricCard label={t.reports.discordMessages} value={report?.total_events ?? 0} to="/events?source=discord" />
           <MetricCard label={t.reports.stillOpen} value={report?.open_events ?? 0} to="/events?status=problem" />
-          <MetricCard label={t.reports.resolved} value={report?.resolved_events ?? 0} to="/events?status=resolved" />
+          <MetricCard label="Zabbix visible" value={eventSummary?.by_source.find((item) => item.label === 'zabbix_api')?.value ?? 0} to="/events?source=zabbix_api&include_unparsed=true" />
         </div>
       </section>
+
+      <section className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
+        <SourceHealthPanel diagnostics={diagnostics} />
+        <SourceMixPanel summary={eventSummary} />
+      </section>
+
+      <NocEventsPanel
+        title="NOC open problems from all sources"
+        subtitle="Discord and Zabbix alerts that currently require operational follow-up."
+        items={openSourceEvents}
+        emptyLabel="No open problem currently detected across enabled sources."
+      />
 
       <DailyTrendPanel items={report?.daily_trend ?? []} />
       <SeverityImpactPanel items={report?.by_severity ?? []} total={readableEvents} />
@@ -271,6 +300,13 @@ export function ReportsPage() {
       <OpenProblemsPanel
         items={report?.open_problems ?? []}
         onOpen={(problem) => setSelectedAlert(openProblemToDetail(problem))}
+      />
+
+      <NocEventsPanel
+        title="Latest collected events from all sources"
+        subtitle="Most recent Discord and Zabbix events stored by AlertHub."
+        items={recentSourceEvents}
+        emptyLabel="No source event collected yet."
       />
 
       <section className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
@@ -404,6 +440,191 @@ function StabilizationRecommendationsPanel({ report }: { report: WeeklyDiscordRe
             {recommendation}
           </div>
         ))}
+      </div>
+    </section>
+  );
+}
+
+function SourceHealthPanel({ diagnostics }: { diagnostics: ConnectorDiagnostic[] }) {
+  const visibleDiagnostics = diagnostics.filter((item) =>
+    ['discord', 'zabbix_api', 'zabbix_database'].includes(item.source),
+  );
+
+  return (
+    <section className="rounded-md border border-white/10 bg-white/[0.04] p-6">
+      <div className="flex items-center gap-2">
+        <CheckCircle2 className="h-5 w-5 text-emerald-300" aria-hidden="true" />
+        <h3 className="text-lg font-semibold text-white">Connector health for NOC</h3>
+      </div>
+      <div className="mt-5 grid gap-3 md:grid-cols-3">
+        {visibleDiagnostics.map((diagnostic) => {
+          const healthy = diagnostic.enabled && diagnostic.ready;
+          return (
+            <Link
+              key={diagnostic.source}
+              to={`/events?source=${diagnostic.source}&include_unparsed=true`}
+              className={[
+                'rounded-md border p-4 transition hover:-translate-y-0.5',
+                healthy
+                  ? 'border-emerald-300/25 bg-emerald-300/[0.06] hover:bg-emerald-300/[0.09]'
+                  : diagnostic.enabled
+                    ? 'border-amber-300/25 bg-amber-300/[0.06] hover:bg-amber-300/[0.09]'
+                    : 'border-white/10 bg-slate-950/60 hover:bg-white/[0.05]',
+              ].join(' ')}
+            >
+              <p className="text-sm font-semibold text-white">{sourceLabel(diagnostic.source)}</p>
+              <p
+                className={[
+                  'mt-2 text-sm',
+                  healthy ? 'text-emerald-200' : diagnostic.enabled ? 'text-amber-200' : 'text-slate-400',
+                ].join(' ')}
+              >
+                {healthy ? 'Connected' : diagnostic.enabled ? 'Needs configuration' : 'Disabled'}
+              </p>
+              {diagnostic.missing_configuration.length > 0 ? (
+                <p className="mt-2 text-xs leading-5 text-slate-400">
+                  Missing: {diagnostic.missing_configuration.join(', ')}
+                </p>
+              ) : null}
+            </Link>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function SourceMixPanel({ summary }: { summary: EventSummary | null }) {
+  const items = summary?.by_source ?? [];
+  const maxValue = Math.max(...items.map((item) => item.value), 1);
+
+  return (
+    <section className="rounded-md border border-white/10 bg-white/[0.04] p-6">
+      <div className="flex items-center gap-2">
+        <Database className="h-5 w-5 text-cyan-300" aria-hidden="true" />
+        <h3 className="text-lg font-semibold text-white">Source coverage</h3>
+      </div>
+      <div className="mt-5 space-y-3">
+        {items.map((item) => {
+          const width = Math.max((item.value / maxValue) * 100, 6);
+          return (
+            <Link
+              key={item.label}
+              to={`/events?source=${item.label}&include_unparsed=true`}
+              className="group block rounded-md border border-white/10 bg-slate-950/60 p-4 transition hover:-translate-y-0.5 hover:border-cyan-300/40"
+            >
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-sm font-semibold text-white">{sourceLabel(item.label)}</span>
+                <span className="text-sm text-slate-300">{item.value}</span>
+              </div>
+              <div className="mt-3 h-2 rounded-full bg-slate-800">
+                <div
+                  className="h-2 rounded-full bg-cyan-300 transition-all group-hover:bg-cyan-200"
+                  style={{ width: `${width}%` }}
+                />
+              </div>
+            </Link>
+          );
+        })}
+        {items.length === 0 ? (
+          <p className="rounded-md border border-white/10 bg-slate-950/60 p-4 text-sm text-slate-400">
+            No stored event source yet.
+          </p>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
+function NocEventsPanel({
+  title,
+  subtitle,
+  items,
+  emptyLabel,
+}: {
+  title: string;
+  subtitle: string;
+  items: AlertEvent[];
+  emptyLabel: string;
+}) {
+  return (
+    <section className="rounded-md border border-white/10 bg-white/[0.04] p-6">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="h-5 w-5 text-amber-200" aria-hidden="true" />
+            <h3 className="text-lg font-semibold text-white">{title}</h3>
+          </div>
+          <p className="mt-2 text-sm leading-6 text-slate-300">{subtitle}</p>
+        </div>
+        <span className="w-fit rounded-md bg-slate-950/70 px-3 py-1.5 text-sm font-semibold text-cyan-100">
+          {items.length}
+        </span>
+      </div>
+      <div className="mt-5 overflow-x-auto">
+        <table className="w-full min-w-[980px] text-left text-sm">
+          <thead className="border-b border-white/10 text-xs uppercase tracking-wide text-slate-500">
+            <tr>
+              <th className="py-3 pr-4">Source</th>
+              <th className="py-3 pr-4">Problem</th>
+              <th className="py-3 pr-4">Host</th>
+              <th className="py-3 pr-4">Severity</th>
+              <th className="py-3 pr-4">Status</th>
+              <th className="py-3 pr-4">Owner</th>
+              <th className="py-3 pr-4">Links</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-white/10">
+            {items.map((event) => (
+              <tr key={event.id} className="text-slate-300">
+                <td className="py-3 pr-4 font-semibold text-cyan-200">{sourceLabel(event.source)}</td>
+                <td className="py-3 pr-4">
+                  <p className="font-medium text-white">{event.problem_name ?? event.problem_id ?? 'Unparsed event'}</p>
+                  {event.operational_data ? (
+                    <p className="mt-1 max-w-md text-xs leading-5 text-slate-400">{event.operational_data}</p>
+                  ) : null}
+                </td>
+                <td className="py-3 pr-4">{event.host ?? 'Not detected'}</td>
+                <td className="py-3 pr-4">{event.severity ?? 'Not detected'}</td>
+                <td className="py-3 pr-4">{event.status ?? 'unknown'}</td>
+                <td className="py-3 pr-4">
+                  <p>{event.escalation_owner ?? 'Not assigned'}</p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    {event.escalation_level ?? 'No escalation'}{' '}
+                    {event.escalation_priority ? `priority ${event.escalation_priority}` : ''}
+                  </p>
+                </td>
+                <td className="py-3 pr-4">
+                  <div className="flex flex-wrap gap-2">
+                    <Link
+                      to={eventExplorerHref(event.problem_id, event.status, event.source)}
+                      className="rounded-md border border-cyan-300/25 px-2 py-1 text-xs font-semibold text-cyan-100 transition hover:bg-cyan-300/10"
+                    >
+                      Events
+                    </Link>
+                    {event.links.slice(0, 2).map((link) => (
+                      <a
+                        key={link}
+                        href={link}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1 rounded-md border border-white/10 px-2 py-1 text-xs text-slate-100 transition hover:bg-white/5"
+                      >
+                        Source
+                        <ExternalLink className="h-3 w-3" aria-hidden="true" />
+                      </a>
+                    ))}
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {items.length === 0 ? (
+          <p className="rounded-md border border-white/10 bg-slate-950/60 p-4 text-sm text-slate-400">
+            {emptyLabel}
+          </p>
+        ) : null}
       </div>
     </section>
   );
@@ -786,8 +1007,20 @@ function reportEventToDetail(event: WeeklyDiscordReportEvent): AlertDetail {
   };
 }
 
-function eventExplorerHref(problemId: string | null, status: string | null) {
+function sourceLabel(source: string) {
+  const labels: Record<string, string> = {
+    discord: 'Discord',
+    zabbix_api: 'Zabbix API',
+    zabbix_database: 'Zabbix DB',
+  };
+  return labels[source] ?? source;
+}
+
+function eventExplorerHref(problemId: string | null, status: string | null, source?: string) {
   const params = new URLSearchParams();
+  if (source) {
+    params.set('source', source);
+  }
   if (problemId) {
     params.set('q', problemId);
   }
