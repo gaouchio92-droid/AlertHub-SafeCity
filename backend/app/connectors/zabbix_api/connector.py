@@ -98,7 +98,7 @@ class ZabbixApiConnector(BaseConnector):
             "output": "extend",
             "selectHosts": ["hostid", "host", "name"],
             "selectRelatedObject": "extend",
-            "select_acknowledges": "extend",
+            "selectAcknowledges": "extend",
             "sortfield": ["clock", "eventid"],
             "sortorder": "ASC",
             "limit": 100,
@@ -106,8 +106,8 @@ class ZabbixApiConnector(BaseConnector):
         if self._last_event_clock is not None:
             event_params["time_from"] = self._last_event_clock + 1
 
-        problems = await self.problem_get(problem_params)
-        events = await self.event_get(event_params)
+        problems = await self._safe_collect_method("problem.get", problem_params)
+        events = await self._safe_collect_method("event.get", event_params)
         normalized_events = [
             {**event, "zabbix_payload_type": "event"}
             for event in events
@@ -126,6 +126,21 @@ class ZabbixApiConnector(BaseConnector):
         if clocks:
             self._last_event_clock = max(clocks)
         return normalized_events
+
+    async def _safe_collect_method(
+        self,
+        method: str,
+        params: dict[str, Any],
+    ) -> list[dict[str, Any]]:
+        """Collect one Zabbix method without failing the whole connector sync."""
+        try:
+            if method == "problem.get":
+                return await self.problem_get(params)
+            if method == "event.get":
+                return await self.event_get(params)
+        except Exception:
+            logger.exception("Zabbix API collection method failed", extra={"method": method})
+        return []
 
     async def sync(self) -> list[ConnectorEvent]:
         """Collect and normalize Zabbix API events."""
