@@ -47,7 +47,7 @@ class ZabbixApiConnector(BaseConnector):
             logger.warning("Zabbix API connector enabled but missing credentials")
             return
 
-        self._client = httpx.AsyncClient(base_url=self._settings.zabbix_api_url, timeout=20.0)
+        self._client = httpx.AsyncClient(timeout=20.0)
         self._auth_token = await self.authenticate()
         self._connected = bool(self._auth_token)
 
@@ -227,7 +227,7 @@ class ZabbixApiConnector(BaseConnector):
         if authenticated:
             body["auth"] = self._auth_token
 
-        response = await self._client.post("", json=body)
+        response = await self._client.post(self._settings.zabbix_api_url, json=body)
         response.raise_for_status()
         payload = response.json()
         if "error" in payload:
