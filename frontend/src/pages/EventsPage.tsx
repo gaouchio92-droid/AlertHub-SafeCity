@@ -7,6 +7,7 @@ import { AlertEvent, EventList, EventSyncResult, getEvents, syncEvents } from '.
 const PAGE_SIZE = 20;
 
 type EventFilterState = {
+  source: string;
   query: string;
   status: string;
   severity: string;
@@ -37,6 +38,9 @@ function formatDuration(seconds: number | null) {
 }
 
 function normalizedLinks(event: AlertEvent) {
+  if (event.links.length > 0) {
+    return event.links;
+  }
   const normalized = event.raw_payload.normalized;
   if (!normalized || typeof normalized !== 'object' || !('links' in normalized)) {
     return [];
@@ -53,9 +57,18 @@ function eventTitle(event: AlertEvent) {
     return event.problem_name;
   }
   if (event.problem_id) {
-    return `Discord message ${event.problem_id.slice(-6)}`;
+    return `${sourceLabel(event.source)} event ${event.problem_id.slice(-6)}`;
   }
   return 'Unparsed event';
+}
+
+function sourceLabel(source: string) {
+  const labels: Record<string, string> = {
+    discord: 'Discord',
+    zabbix_api: 'Zabbix API',
+    zabbix_database: 'Zabbix DB',
+  };
+  return labels[source] ?? source;
 }
 
 function statusClassName(status: string | null) {
@@ -72,10 +85,11 @@ export function EventsPage() {
   const [searchParams] = useSearchParams();
   const [events, setEvents] = useState<EventList | null>(null);
   const [filters, setFilters] = useState<EventFilterState>({
+    source: searchParams.get('source') ?? '',
     query: searchParams.get('q') ?? '',
     status: searchParams.get('status') ?? '',
     severity: searchParams.get('severity') ?? '',
-    includeUnparsed: false,
+    includeUnparsed: searchParams.get('include_unparsed') === 'true',
   });
   const [offset, setOffset] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -91,7 +105,7 @@ export function EventsPage() {
     setIsLoading(true);
     try {
       const response = await getEvents({
-        source: 'discord',
+        source: filters.source || undefined,
         status: filters.status || undefined,
         severity: filters.severity || undefined,
         q: filters.query.trim() || undefined,
@@ -116,9 +130,11 @@ export function EventsPage() {
   useEffect(() => {
     setFilters((current) => ({
       ...current,
+      source: searchParams.get('source') ?? '',
       query: searchParams.get('q') ?? '',
       status: searchParams.get('status') ?? '',
       severity: searchParams.get('severity') ?? '',
+      includeUnparsed: searchParams.get('include_unparsed') === 'true' || current.includeUnparsed,
     }));
   }, [searchParams]);
 
@@ -129,7 +145,7 @@ export function EventsPage() {
       setSyncResult(response);
       await loadEvents(0);
     } catch {
-      setError('Discord synchronization failed');
+      setError('Connector synchronization failed');
     } finally {
       setIsSyncing(false);
     }
@@ -142,8 +158,8 @@ export function EventsPage() {
           <p className="text-sm font-semibold uppercase tracking-wide text-cyan-300">Events</p>
           <h2 className="mt-2 text-3xl font-semibold text-white">Alert event explorer</h2>
           <p className="mt-3 max-w-3xl text-base leading-7 text-slate-300">
-            Triage normalized Discord alerts with host, severity, status, timestamps, and source
-            links.
+            Triage normalized Discord and Zabbix alerts with host, severity, status, escalation,
+            timestamps, and source links for NOC follow-up.
           </p>
         </div>
         <button
@@ -153,7 +169,7 @@ export function EventsPage() {
           className="inline-flex items-center justify-center gap-2 rounded-md bg-cyan-400 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
         >
           <RefreshCw className={['h-4 w-4', isSyncing ? 'animate-spin' : ''].join(' ')} />
-          Sync Discord
+          Sync sources
         </button>
       </div>
 
@@ -164,7 +180,23 @@ export function EventsPage() {
             <h3 className="text-base font-semibold text-white">Filters</h3>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2 xl:min-w-[920px] xl:grid-cols-[1.2fr_0.8fr_0.8fr_1fr]">
+          <div className="grid gap-3 sm:grid-cols-2 xl:min-w-[1080px] xl:grid-cols-[0.9fr_1.2fr_0.8fr_0.8fr_1fr]">
+            <label className="space-y-2 text-sm text-slate-300">
+              <span>Source</span>
+              <select
+                value={filters.source}
+                onChange={(event) =>
+                  setFilters((current) => ({ ...current, source: event.target.value }))
+                }
+                className="w-full rounded-md border border-white/10 bg-slate-950 px-3 py-2 text-white outline-none transition focus:border-cyan-300"
+              >
+                <option value="">All sources</option>
+                <option value="discord">Discord</option>
+                <option value="zabbix_api">Zabbix API</option>
+                <option value="zabbix_database">Zabbix Database</option>
+              </select>
+            </label>
+
             <label className="space-y-2 text-sm text-slate-300">
               <span>Search</span>
               <div className="flex items-center gap-2 rounded-md border border-white/10 bg-slate-950 px-3 py-2 transition focus-within:border-cyan-300">
@@ -206,9 +238,13 @@ export function EventsPage() {
               >
                 <option value="">All severities</option>
                 <option value="Average">Average</option>
+                <option value="average">average</option>
                 <option value="Warning">Warning</option>
+                <option value="warning">warning</option>
                 <option value="High">High</option>
+                <option value="high">high</option>
                 <option value="Disaster">Disaster</option>
+                <option value="disaster">disaster</option>
               </select>
             </label>
 
@@ -242,13 +278,14 @@ export function EventsPage() {
 
       <section className="rounded-md border border-white/10 bg-white/[0.04] p-5">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[1040px] text-left text-sm">
+          <table className="w-full min-w-[1260px] text-left text-sm">
             <thead className="border-b border-white/10 text-xs uppercase tracking-wide text-slate-500">
               <tr>
                 <th className="py-3 pr-4">Problem</th>
                 <th className="py-3 pr-4">Host</th>
                 <th className="py-3 pr-4">Severity</th>
                 <th className="py-3 pr-4">Status</th>
+                <th className="py-3 pr-4">NOC owner</th>
                 <th className="py-3 pr-4">Duration</th>
                 <th className="py-3 pr-4">Started</th>
                 <th className="py-3 pr-4">Source</th>
@@ -264,6 +301,11 @@ export function EventsPage() {
                       <p className="mt-1 text-xs text-slate-500">
                         {event.problem_id ? `ID ${event.problem_id}` : 'No problem id'}
                       </p>
+                      {event.operational_data ? (
+                        <p className="mt-2 max-w-xl text-xs leading-5 text-slate-400">
+                          {event.operational_data}
+                        </p>
+                      ) : null}
                     </td>
                     <td className="py-3 pr-4">{event.host ?? 'Not detected'}</td>
                     <td className="py-3 pr-4">{event.severity ?? 'Not detected'}</td>
@@ -277,9 +319,19 @@ export function EventsPage() {
                         {event.status ?? 'unknown'}
                       </span>
                     </td>
+                    <td className="py-3 pr-4">
+                      <p className="text-slate-200">{event.escalation_owner ?? 'Not assigned'}</p>
+                      <p className="mt-1 text-xs text-slate-500">
+                        {event.escalation_level ?? 'No level'}
+                        {event.escalation_priority ? ` / priority ${event.escalation_priority}` : ''}
+                      </p>
+                    </td>
                     <td className="py-3 pr-4">{formatDuration(event.duration)}</td>
                     <td className="py-3 pr-4">{formatDateTime(event.started_at)}</td>
                     <td className="py-3 pr-4">
+                      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        {sourceLabel(event.source)}
+                      </p>
                       {links.length > 0 ? (
                         <a
                           href={links[0]}
