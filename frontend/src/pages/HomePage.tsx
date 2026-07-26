@@ -2,12 +2,16 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   Activity,
   AlertTriangle,
+  BarChart3,
   CheckCircle2,
   ChevronRight,
+  Clock3,
   Database,
+  ExternalLink,
   FileCode2,
   FileText,
   Network,
+  RadioTower,
   Server,
   ShieldCheck,
   TerminalSquare,
@@ -15,11 +19,13 @@ import {
 import { Link } from 'react-router-dom';
 
 import {
+  AlertEvent,
   ConnectorDiagnostic,
   EventSummary,
   WeeklyDiscordReport,
   getConnectorDiagnostics,
   getEventSummary,
+  getEvents,
   getWeeklyDiscordReport,
 } from '../services/api';
 
@@ -114,6 +120,8 @@ export function HomePage() {
     useState<(typeof readinessItems)[number]['key']>('docker');
   const [report, setReport] = useState<WeeklyDiscordReport | null>(null);
   const [eventSummary, setEventSummary] = useState<EventSummary | null>(null);
+  const [recentEvents, setRecentEvents] = useState<AlertEvent[]>([]);
+  const [openEvents, setOpenEvents] = useState<AlertEvent[]>([]);
   const [diagnostics, setDiagnostics] = useState<ConnectorDiagnostic[]>([]);
   const [isLoadingOperations, setIsLoadingOperations] = useState(true);
   const [operationsError, setOperationsError] = useState<string | null>(null);
@@ -127,18 +135,40 @@ export function HomePage() {
     () => diagnostics.find((diagnostic) => diagnostic.source === 'zabbix_api') ?? null,
     [diagnostics],
   );
+  const topHosts = useMemo(() => {
+    const counts = [...openEvents, ...recentEvents].reduce<Record<string, number>>((acc, event) => {
+      const host = event.host ?? 'Not detected';
+      acc[host] = (acc[host] ?? 0) + 1;
+      return acc;
+    }, {});
+
+    return Object.entries(counts)
+      .map(([label, value]) => ({ label, value }))
+      .sort((first, second) => second.value - first.value)
+      .slice(0, 6);
+  }, [openEvents, recentEvents]);
 
   useEffect(() => {
     async function loadOperationalSummary() {
       try {
-        const [reportResponse, diagnosticsResponse, summaryResponse] = await Promise.all([
+        const [
+          reportResponse,
+          diagnosticsResponse,
+          summaryResponse,
+          recentEventsResponse,
+          openEventsResponse,
+        ] = await Promise.all([
           getWeeklyDiscordReport(),
           getConnectorDiagnostics(),
           getEventSummary(),
+          getEvents({ limit: 12, include_unparsed: true }),
+          getEvents({ status: 'problem', limit: 12, include_unparsed: true }),
         ]);
         setReport(reportResponse);
         setDiagnostics(diagnosticsResponse);
         setEventSummary(summaryResponse);
+        setRecentEvents(recentEventsResponse.items);
+        setOpenEvents(openEventsResponse.items);
         setOperationsError(null);
       } catch {
         setOperationsError('Operational summary unavailable');
@@ -156,8 +186,8 @@ export function HomePage() {
         <p className="text-sm font-semibold uppercase tracking-wide text-cyan-300">Operations</p>
         <h2 className="mt-2 text-3xl font-semibold text-white">Safe City dashboard</h2>
         <p className="mt-3 max-w-3xl text-base leading-7 text-slate-300">
-          Live monitoring summary from the configured Discord alert channel, with infrastructure
-          readiness kept visible for operations.
+          Live NOC command view for Discord and Zabbix alerts, open incidents, connector health,
+          escalation ownership, and platform readiness.
         </p>
       </div>
 
@@ -168,7 +198,7 @@ export function HomePage() {
               <Activity className="h-5 w-5 text-emerald-300" aria-hidden="true" />
               <h3 className="text-lg font-semibold text-white">Operational snapshot</h3>
             </div>
-          <p className="mt-2 text-sm text-slate-400">
+            <p className="mt-2 text-sm text-slate-400">
               {isLoadingOperations ? 'Loading live data' : 'Current multi-source ingestion view'}
             </p>
           </div>
@@ -201,7 +231,7 @@ export function HomePage() {
             label="Open problems"
             value={eventSummary?.open_events ?? report?.open_events ?? 0}
             tone={(eventSummary?.open_events ?? report?.open_events) ? 'rose' : 'emerald'}
-            to="/reports"
+            to="/events?status=problem"
           />
           <OperationalMetric
             label="Zabbix events"
@@ -245,6 +275,45 @@ export function HomePage() {
           </p>
         ) : null}
       </section>
+
+      <section className="grid gap-4 xl:grid-cols-[0.85fr_1.15fr]">
+        <StatusDonutPanel summary={eventSummary} />
+        <div className="grid gap-4 lg:grid-cols-2">
+          <MetricBarsPanel
+            title="Events by source"
+            icon={RadioTower}
+            items={eventSummary?.by_source ?? []}
+            colorClass="bg-cyan-300"
+            hrefBuilder={(label) => `/events?source=${encodeURIComponent(label)}&include_unparsed=true`}
+            labelBuilder={sourceLabel}
+          />
+          <MetricBarsPanel
+            title="Severity pressure"
+            icon={AlertTriangle}
+            items={eventSummary?.by_severity ?? []}
+            colorClass="bg-amber-300"
+            hrefBuilder={(label) => `/events?severity=${encodeURIComponent(label)}`}
+            labelBuilder={severityLabel}
+          />
+        </div>
+      </section>
+
+      <section className="grid gap-4 xl:grid-cols-[1.25fr_0.75fr]">
+        <OpenAlertsPanel events={openEvents} />
+        <div className="grid gap-4">
+          <ConnectorHealthPanel diagnostics={diagnostics} />
+          <MetricBarsPanel
+            title="Hosts requiring attention"
+            icon={Server}
+            items={topHosts}
+            colorClass="bg-rose-300"
+            hrefBuilder={(label) => `/events?q=${encodeURIComponent(label)}&include_unparsed=true`}
+            labelBuilder={(label) => label}
+          />
+        </div>
+      </section>
+
+      <RecentEventsTimeline events={recentEvents} />
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {cards.map((card) => (
@@ -361,6 +430,387 @@ export function HomePage() {
   );
 }
 
+function StatusDonutPanel({ summary }: { summary: EventSummary | null }) {
+  const open = summary?.open_events ?? 0;
+  const resolved = summary?.resolved_events ?? 0;
+  const unparsed = summary?.unparsed_events ?? 0;
+  const total = Math.max(summary?.total_events ?? 0, 1);
+  const openPercent = Math.round((open / total) * 100);
+  const resolvedPercent = Math.round((resolved / total) * 100);
+
+  return (
+    <section className="animate-fade-slide-up rounded-md border border-white/10 bg-white/[0.04] p-6">
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2">
+            <BarChart3 className="h-5 w-5 text-cyan-300" aria-hidden="true" />
+            <h3 className="text-lg font-semibold text-white">Incident status</h3>
+          </div>
+          <p className="mt-2 text-sm leading-6 text-slate-400">
+            Open, resolved, and parsing state from all enabled sources.
+          </p>
+        </div>
+        <Link
+          to="/events"
+          className="rounded-md border border-cyan-300/30 px-3 py-2 text-sm font-semibold text-cyan-100 transition hover:-translate-y-0.5 hover:bg-cyan-300/10"
+        >
+          Explore
+        </Link>
+      </div>
+
+      <div className="mt-6 grid gap-6 sm:grid-cols-[190px_1fr] sm:items-center">
+        <div className="relative mx-auto h-44 w-44">
+          <svg className="h-full w-full -rotate-90" viewBox="0 0 120 120" role="img" aria-label="Incident status chart">
+            <circle cx="60" cy="60" r="48" fill="none" stroke="rgba(15,23,42,0.9)" strokeWidth="14" />
+            <circle
+              cx="60"
+              cy="60"
+              r="48"
+              fill="none"
+              stroke="rgb(244,63,94)"
+              strokeDasharray={`${openPercent * 3.01} 301`}
+              strokeLinecap="round"
+              strokeWidth="14"
+            />
+            <circle
+              cx="60"
+              cy="60"
+              r="32"
+              fill="none"
+              stroke="rgb(52,211,153)"
+              strokeDasharray={`${resolvedPercent * 2.01} 201`}
+              strokeLinecap="round"
+              strokeWidth="10"
+            />
+          </svg>
+          <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
+            <span className="text-3xl font-semibold text-white">{summary?.total_events ?? 0}</span>
+            <span className="text-xs uppercase tracking-wide text-slate-400">events</span>
+          </div>
+        </div>
+
+        <div className="grid gap-3">
+          <StatusPill label="Open problems" value={open} tone="rose" to="/events?status=problem" />
+          <StatusPill label="Resolved" value={resolved} tone="emerald" to="/events?status=resolved" />
+          <StatusPill label="Unparsed" value={unparsed} tone="amber" to="/events?include_unparsed=true" />
+          <StatusPill label="Last event" value={formatEventDate(summary?.last_event_at)} tone="cyan" to="/events" />
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function MetricBarsPanel({
+  title,
+  icon: Icon,
+  items,
+  colorClass,
+  hrefBuilder,
+  labelBuilder,
+}: {
+  title: string;
+  icon: typeof BarChart3;
+  items: { label: string; value: number }[];
+  colorClass: string;
+  hrefBuilder: (label: string) => string;
+  labelBuilder: (label: string) => string;
+}) {
+  const maxValue = Math.max(...items.map((item) => item.value), 1);
+
+  return (
+    <section className="animate-fade-slide-up rounded-md border border-white/10 bg-white/[0.04] p-5">
+      <div className="flex items-center gap-2">
+        <Icon className="h-5 w-5 text-cyan-300" aria-hidden="true" />
+        <h3 className="text-base font-semibold text-white">{title}</h3>
+      </div>
+      <div className="mt-5 space-y-3">
+        {items.slice(0, 6).map((item) => {
+          const width = Math.max((item.value / maxValue) * 100, 5);
+          return (
+            <Link
+              key={item.label}
+              to={hrefBuilder(item.label)}
+              className="group block rounded-md border border-white/10 bg-slate-950/60 p-3 transition hover:-translate-y-0.5 hover:border-cyan-300/35 hover:bg-white/[0.05]"
+            >
+              <div className="flex items-center justify-between gap-3">
+                <span className="truncate text-sm font-semibold text-slate-100">
+                  {labelBuilder(item.label)}
+                </span>
+                <span className="text-sm text-slate-300">{item.value}</span>
+              </div>
+              <div className="mt-3 h-2 rounded-full bg-slate-800">
+                <div
+                  className={[
+                    'h-2 rounded-full transition-all duration-500 group-hover:brightness-125',
+                    colorClass,
+                  ].join(' ')}
+                  style={{ width: `${width}%` }}
+                />
+              </div>
+            </Link>
+          );
+        })}
+        {items.length === 0 ? (
+          <p className="rounded-md border border-white/10 bg-slate-950/60 p-4 text-sm text-slate-400">
+            No data collected yet.
+          </p>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
+function OpenAlertsPanel({ events }: { events: AlertEvent[] }) {
+  return (
+    <section className="animate-fade-slide-up rounded-md border border-rose-300/20 bg-rose-300/[0.04] p-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="h-5 w-5 text-rose-200" aria-hidden="true" />
+            <h3 className="text-lg font-semibold text-white">Priority open alerts</h3>
+          </div>
+          <p className="mt-2 text-sm leading-6 text-slate-300">
+            Active problems requiring NOC triage, owner follow-up, and source verification.
+          </p>
+        </div>
+        <Link
+          to="/events?status=problem"
+          className="inline-flex w-fit items-center gap-2 rounded-md bg-rose-300 px-3 py-2 text-sm font-semibold text-slate-950 transition hover:-translate-y-0.5 hover:bg-rose-200"
+        >
+          View all open
+          <ChevronRight className="h-4 w-4" aria-hidden="true" />
+        </Link>
+      </div>
+
+      <div className="mt-5 overflow-x-auto">
+        <table className="w-full min-w-[900px] text-left text-sm">
+          <thead className="border-b border-white/10 text-xs uppercase tracking-wide text-slate-500">
+            <tr>
+              <th className="py-3 pr-4">Source</th>
+              <th className="py-3 pr-4">Problem</th>
+              <th className="py-3 pr-4">Host</th>
+              <th className="py-3 pr-4">Severity</th>
+              <th className="py-3 pr-4">Owner</th>
+              <th className="py-3 pr-4">Started</th>
+              <th className="py-3 pr-4">Action</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-white/10">
+            {events.map((event) => (
+              <tr key={event.id} className="align-top text-slate-300">
+                <td className="py-3 pr-4 font-semibold text-cyan-200">{sourceLabel(event.source)}</td>
+                <td className="py-3 pr-4">
+                  <p className="max-w-md font-medium text-white">
+                    {event.problem_name ?? event.problem_id ?? 'Unparsed alert'}
+                  </p>
+                  {event.operational_data ? (
+                    <p className="mt-1 max-w-md text-xs leading-5 text-slate-400">
+                      {event.operational_data}
+                    </p>
+                  ) : null}
+                </td>
+                <td className="py-3 pr-4">{event.host ?? 'Not detected'}</td>
+                <td className="py-3 pr-4">
+                  <SeverityBadge severity={event.severity} />
+                </td>
+                <td className="py-3 pr-4">
+                  <p>{event.escalation_owner ?? 'NOC Team'}</p>
+                  <p className="mt-1 text-xs text-slate-500">{event.escalation_level ?? 'Standard follow-up'}</p>
+                </td>
+                <td className="py-3 pr-4">{formatEventDate(event.started_at ?? event.created_at)}</td>
+                <td className="py-3 pr-4">
+                  <div className="flex flex-wrap gap-2">
+                    <Link
+                      to={eventHref(event)}
+                      className="rounded-md border border-cyan-300/30 px-2 py-1 text-xs font-semibold text-cyan-100 transition hover:bg-cyan-300/10"
+                    >
+                      Details
+                    </Link>
+                    {event.links.slice(0, 1).map((link) => (
+                      <a
+                        key={link}
+                        href={link}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1 rounded-md border border-white/10 px-2 py-1 text-xs text-slate-100 transition hover:bg-white/5"
+                      >
+                        Source
+                        <ExternalLink className="h-3 w-3" aria-hidden="true" />
+                      </a>
+                    ))}
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {events.length === 0 ? (
+          <div className="rounded-md border border-emerald-300/20 bg-emerald-300/[0.06] p-5 text-sm text-emerald-100">
+            No open problem detected from Discord or Zabbix.
+          </div>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
+function ConnectorHealthPanel({ diagnostics }: { diagnostics: ConnectorDiagnostic[] }) {
+  return (
+    <section className="animate-fade-slide-up rounded-md border border-white/10 bg-white/[0.04] p-5">
+      <div className="flex items-center gap-2">
+        <RadioTower className="h-5 w-5 text-emerald-300" aria-hidden="true" />
+        <h3 className="text-base font-semibold text-white">Connector health</h3>
+      </div>
+      <div className="mt-5 grid gap-3">
+        {diagnostics
+          .filter((diagnostic) => ['discord', 'zabbix_api', 'zabbix_database'].includes(diagnostic.source))
+          .map((diagnostic) => {
+            const ready = diagnostic.enabled && diagnostic.ready;
+            return (
+              <Link
+                key={diagnostic.source}
+                to={`/events?source=${diagnostic.source}&include_unparsed=true`}
+                className="flex items-center justify-between gap-3 rounded-md border border-white/10 bg-slate-950/60 p-3 transition hover:-translate-y-0.5 hover:border-cyan-300/35"
+              >
+                <div>
+                  <p className="text-sm font-semibold text-white">{sourceLabel(diagnostic.source)}</p>
+                  <p className="mt-1 text-xs text-slate-400">
+                    {ready
+                      ? 'Connected and collecting'
+                      : diagnostic.enabled
+                        ? `Needs config: ${diagnostic.missing_configuration.join(', ') || 'connection failed'}`
+                        : 'Disabled by environment'}
+                  </p>
+                </div>
+                <span
+                  className={[
+                    'rounded-md px-2 py-1 text-xs font-semibold',
+                    ready
+                      ? 'bg-emerald-300/10 text-emerald-200 ring-1 ring-emerald-300/25'
+                      : diagnostic.enabled
+                        ? 'bg-amber-300/10 text-amber-200 ring-1 ring-amber-300/25'
+                        : 'bg-slate-700/50 text-slate-300 ring-1 ring-white/10',
+                  ].join(' ')}
+                >
+                  {ready ? 'Online' : diagnostic.enabled ? 'Check' : 'Off'}
+                </span>
+              </Link>
+            );
+          })}
+      </div>
+    </section>
+  );
+}
+
+function RecentEventsTimeline({ events }: { events: AlertEvent[] }) {
+  return (
+    <section className="animate-fade-slide-up rounded-md border border-white/10 bg-white/[0.04] p-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <div className="flex items-center gap-2">
+            <Clock3 className="h-5 w-5 text-cyan-300" aria-hidden="true" />
+            <h3 className="text-lg font-semibold text-white">Latest alert stream</h3>
+          </div>
+          <p className="mt-2 text-sm text-slate-400">
+            Last normalized events received from Discord and Zabbix.
+          </p>
+        </div>
+        <Link
+          to="/events?include_unparsed=true"
+          className="inline-flex w-fit items-center gap-2 rounded-md border border-cyan-300/30 px-3 py-2 text-sm font-semibold text-cyan-100 transition hover:-translate-y-0.5 hover:bg-cyan-300/10"
+        >
+          Full stream
+          <ChevronRight className="h-4 w-4" aria-hidden="true" />
+        </Link>
+      </div>
+
+      <div className="mt-5 grid gap-3 lg:grid-cols-2">
+        {events.slice(0, 8).map((event) => (
+          <Link
+            key={event.id}
+            to={eventHref(event)}
+            className="group rounded-md border border-white/10 bg-slate-950/60 p-4 transition hover:-translate-y-0.5 hover:border-cyan-300/35 hover:bg-white/[0.05]"
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold text-white">
+                  {event.problem_name ?? event.problem_id ?? 'Unparsed alert'}
+                </p>
+                <p className="mt-1 text-xs text-slate-400">
+                  {sourceLabel(event.source)} / {event.host ?? 'Host not detected'} /{' '}
+                  {formatEventDate(event.started_at ?? event.created_at)}
+                </p>
+              </div>
+              <SeverityBadge severity={event.severity} />
+            </div>
+            <div className="mt-3 flex items-center justify-between gap-3">
+              <span className="rounded-md bg-slate-900 px-2 py-1 text-xs text-slate-300">
+                {event.status ?? 'unknown'}
+              </span>
+              <ChevronRight className="h-4 w-4 text-slate-500 transition group-hover:translate-x-1 group-hover:text-cyan-200" />
+            </div>
+          </Link>
+        ))}
+        {events.length === 0 ? (
+          <p className="rounded-md border border-white/10 bg-slate-950/60 p-4 text-sm text-slate-400">
+            No alert has been collected yet.
+          </p>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
+function StatusPill({
+  label,
+  value,
+  tone,
+  to,
+}: {
+  label: string;
+  value: number | string;
+  tone: 'amber' | 'cyan' | 'emerald' | 'rose';
+  to: string;
+}) {
+  const toneClasses = {
+    amber: 'border-amber-300/20 bg-amber-300/[0.06] text-amber-100',
+    cyan: 'border-cyan-300/20 bg-cyan-300/[0.06] text-cyan-100',
+    emerald: 'border-emerald-300/20 bg-emerald-300/[0.06] text-emerald-100',
+    rose: 'border-rose-300/20 bg-rose-300/[0.06] text-rose-100',
+  };
+
+  return (
+    <Link
+      to={to}
+      className={[
+        'flex items-center justify-between gap-3 rounded-md border px-3 py-2 transition hover:-translate-y-0.5',
+        toneClasses[tone],
+      ].join(' ')}
+    >
+      <span className="text-sm text-slate-300">{label}</span>
+      <span className="font-semibold text-white">{value}</span>
+    </Link>
+  );
+}
+
+function SeverityBadge({ severity }: { severity: string | null }) {
+  const normalized = (severity ?? 'unknown').toLowerCase();
+  const classes: Record<string, string> = {
+    disaster: 'bg-rose-500/20 text-rose-100 ring-1 ring-rose-300/30',
+    high: 'bg-orange-400/20 text-orange-100 ring-1 ring-orange-300/30',
+    average: 'bg-amber-300/20 text-amber-100 ring-1 ring-amber-300/30',
+    warning: 'bg-yellow-300/15 text-yellow-100 ring-1 ring-yellow-300/25',
+    information: 'bg-cyan-300/15 text-cyan-100 ring-1 ring-cyan-300/25',
+    unknown: 'bg-slate-700/50 text-slate-200 ring-1 ring-white/10',
+  };
+
+  return (
+    <span className={['rounded-md px-2 py-1 text-xs font-semibold', classes[normalized] ?? classes.unknown].join(' ')}>
+      {severityLabel(severity ?? 'unknown')}
+    </span>
+  );
+}
+
 function formatEventDate(value: string | null | undefined) {
   if (!value) {
     return 'No data';
@@ -381,6 +831,30 @@ function sourceLabel(source: string) {
     zabbix_database: 'Zabbix DB',
   };
   return labels[source] ?? source;
+}
+
+function severityLabel(severity: string) {
+  const labels: Record<string, string> = {
+    disaster: 'Disaster',
+    high: 'High',
+    average: 'Average',
+    warning: 'Warning',
+    information: 'Information',
+    unknown: 'Unknown',
+  };
+  return labels[severity.toLowerCase()] ?? severity;
+}
+
+function eventHref(event: AlertEvent) {
+  const params = new URLSearchParams();
+  params.set('include_unparsed', 'true');
+  params.set('source', event.source);
+  if (event.problem_id) {
+    params.set('q', event.problem_id);
+  } else if (event.host) {
+    params.set('q', event.host);
+  }
+  return `/events?${params.toString()}`;
 }
 
 function OperationalMetric({
